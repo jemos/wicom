@@ -18,4 +18,16 @@
 	Centro de Informatica do IST - Universidade Tecnica de Lisboa 
 */
 
-static jmlist map_list;
+#ifndef _GEOMETRY_H
+#define _GEOMETRY_H
+
+typedef struct _v2d {
+	double x,y;
+} v2d;
+
+typedef struct _v3d {
+	double x,y,z;
+} v3d;
+
+#endif
+

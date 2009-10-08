@@ -18,4 +18,12 @@
 	Centro de Informatica do IST - Universidade Tecnica de Lisboa 
 */
 
-static jmlist map_list;
+#ifndef _MAPCOORD_H
+#define _MAPCOORD_H
+
+#include "geometry.h"
+
+typedef v2d mapcoord_t;
+
+#endif
+

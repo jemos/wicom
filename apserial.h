@@ -14,7 +14,39 @@
 	You should have received a copy of the GNU General Public License
 	along with wicom.  If not, see <http://www.gnu.org/licenses/>.
 
-	Copyright (C) 2009 Jean Mousinho
+	Copyright (C) 2009 Jean Mousinho <jean.mousinho@ist.utl.pt>
 	Centro de Informatica do IST - Universidade Tecnica de Lisboa 
 */
 
+#ifndef _APSERIAL_H
+#define _APSERIAL_H
+
+#include "wstatus.h"
+
+typedef struct _aps_t {
+	char *serial;
+	bool set;
+	bool changed;
+} *aps_t;
+
+typedef enum _aps_action_t {
+	aps_action_preget,
+	aps_action_postget,
+	aps_action_preset,
+	aps_action_postset
+} aps_action_t;
+
+typedef struct _aps_action_info_t {
+	aps_t aps;
+	char *serial;
+	aps_action_t action;
+} aps_action_info_t;
+
+typedef wstatus (*APSHOOKROUTINE)(aps_action_info_t action_info,void *param);
+
+aps_get(aps_t aps,char *serial);
+aps_set(aps_t aps,char *serial,bool dup_string);
+aps_attach_hook(APSHOOKROUTINE routine,void *param);
+aps_dettach_hook(APSHOOKROUTINE routine);
+
+#endif
