@@ -24,9 +24,9 @@
 #include "wstatus.h"
 
 typedef enum _apwr_param_t {
-	apwr_param_ofdm,
-	apwr_param_cck,
-	apwr_param_client
+	APWR_PARAM_OFDM,
+	APWR_PARAM_CCK,
+	APWR_PARAM_CLIENT
 } apwr_param_t;
 #define APWR_PARAM_COUNT 3
 
@@ -35,16 +35,16 @@ typedef struct _apwr_t {
 	double cck;
 	double client;
 	bool param_set[APWR_PARAM_COUNT];
-	bool change_flag[APWR_PARAM_COUNT];
+	bool param_change[APWR_PARAM_COUNT];
 } *apwr_t;
 
 typedef enum _apwr_action_t {
-	apwr_action_preget,
-	apwr_action_postget,
-	apwr_action_preset,
-	apwr_action_postset,
-	apwr_action_prechange,
-	apwr_action_postchange
+	APWR_ACTION_PREGET,
+	APWR_ACTION_POSTGET,
+	APWR_ACTION_PRESET,
+	APWR_ACTION_POSTSET,
+	APWR_ACTION_PRECHANGE,
+	APWR_ACTION_POSTCHANGE
 } apwr_action_t;
 
 
@@ -84,6 +84,9 @@ wstatus apwr_attach_hook(apwr_t self,APWRHOOKROUTINE routine,void *param);
 wstatus apwr_dettach_hook(apwr_t self,APWRHOOKROUTINE routine);
 wstatus apwr_was_changed(apwr_t self,bool *changed_flag);
 wstatus apwr_isset(apwr_t self,bool *set_flag);
+wstatus apwr_dump(apwr_t self);
+wstatus apwr_alloc(apwr_t *apwr);
+wstatus apwr_free(apwr_t self);
 
 #endif
 

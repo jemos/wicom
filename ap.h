@@ -32,6 +32,7 @@
 #ifndef _AP_H
 #define _AP_H
 
+#include <stdbool.h>
 #include "wstatus.h"
 #include "mapcoord.h"
 #include "appower.h"
@@ -47,7 +48,7 @@ typedef struct _ap_t {
 	apip_t ip;
 	aps_t serial;
 	bool param_set[AP_PARAM_COUNT];
-	bool change_flag[AP_PARAM_COUNT];
+	bool param_changed[AP_PARAM_COUNT];
 } *ap_t;
 
 /* params aquired from the AP itself should have a c-class
@@ -62,14 +63,14 @@ typedef enum _ap_params_t {
 #define AP_PARAM_COUNT 5
 
 typedef enum _ap_action_t {
-	ap_action_alloc,
-	ap_action_free,
-	ap_action_preset,
-	ap_action_preget,
-	ap_action_postset,
-	ap_action_postget,
-	ap_action_predump,
-	ap_action_postdump
+	AP_ACTION_ALLOC,
+	AP_ACTION_FREE,
+	AP_ACTION_PRESET,
+	AP_ACTION_PREGET,
+	AP_ACTION_POSTSET,
+	AP_ACTION_POSTGET,
+	AP_ACTION_PREDUMP,
+	AP_ACTION_POSTDUMP
 } ap_action_t;
 
 typedef struct _ap_action_info_alloc_t {
@@ -85,6 +86,8 @@ typedef struct _ap_action_get_t {
 	ap_params_t param;
 	void *value_ptr;
 	size_t value_size;
+	bool param_set;
+	bool param_changed;
 } ap_action_get_t;
 
 typedef struct _ap_action_set_t {
@@ -92,6 +95,8 @@ typedef struct _ap_action_set_t {
 	ap_params_t param;
 	void *value_ptr;
 	size_t value_size;
+	bool param_set;
+	bool param_changed;
 } ap_action_set_t;
 
 typedef struct _ap_action_info_t {

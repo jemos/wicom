@@ -117,7 +117,7 @@ wstatus mapmgr_lookup_by_index(map_index_t index,map_t *map);
 wstatus mapmgr_changed(bool *changed_flag);
 wstatus mapmgr_initialize(apl_init_t init);
 wstatus mapmgr_uninitialize();
-wstatus mapmgr_draw();
+wstatus mapmgr_draw(void);
 wstatus mapmgr_attach_hook(MAPMGRHOOKROUTINE routine,void *param);
 wstatus mapmgr_dettach_hook(MAPMGRHOOKROUTINE routine);
 wstatus mapmgr_dump(void);

@@ -18,3 +18,5 @@
 	Centro de Informatica do IST - Universidade Tecnica de Lisboa 
 */
 
+/* global console object */
+static con_t g_con;

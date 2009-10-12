@@ -18,3 +18,10 @@
 	Centro de Informatica do IST - Universidade Tecnica de Lisboa 
 */
 
+#ifndef _DEBUG_H
+#define _DEBUG_H
+
+
+
+#endif
+

@@ -20,24 +20,29 @@
 #ifndef _MAP_H
 #define _MAP_H
 
+#include <stdbool.h>
+#include "apl.h"
+
 typedef struct _map_t {
 	jmlist shape_list;
+	apl_t ap_list;
 	v3d origin;
 	bool loaded_map;
+	char *name;
 } *map_t;
 
 typedef enum _map_action_t {
-	map_action_alloc
-	map_action_preload,
-	map_action_postload,
-	map_action_prefree,
-	map_action_postfree
-	map_action_preset,
-	map_action_postset,
-	map_action_preget,
-	map_action_postget,
-	map_action_predump,
-	map_action_postdump
+	MAP_ACTION_ALLOC,
+	MAP_ACTION_PRELOAD,
+	MAP_ACTION_POSTLOAD,
+	MAP_ACTION_PREFREE,
+	MAP_ACTION_POSTFREE,
+	MAP_ACTION_PRESET,
+	MAP_ACTION_POSTSET,
+	MAP_ACTION_PREGET,
+	MAP_ACTION_POSTGET,
+	MAP_ACTION_PREDUMP,
+	MAP_ACTION_POSTDUMP
 } map_action_t;
 
 typedef struct _map_action_info_t {
@@ -62,11 +67,13 @@ typedef enum _map_params_t {
 wstatus map_dump(map_t self);
 wstatus map_set_param(map_t self,map_params_t param,void *value_ptr,size_t value_size);
 wstatus map_get_param(map_t self,map_params_t param,void *value_ptr,size_t value_size);
-wstatus map_free(map_t map);
+wstatus map_free(map_t self);
 wstatus map_alloc(map_t *map);
-wstatus map_load(map_t self,char *name);
-wstatus map_attach_hook(map_t self,MAPHOOKROUTINE routine,void *param)
-wstatus map_dettach_hook(map_t self,MAPHOOKROUTINE routine)
+wstatus map_config_load(cfgmgr_t cfgmgr,char *section,map_t *map);
+wstatus map_config_save(map_t self,cfgmgr_t cfgmgr,char *section);
+wstatus map_attach_hook(map_t self,MAPHOOKROUTINE routine,void *param);
+wstatus map_dettach_hook(map_t self,MAPHOOKROUTINE routine);
+wstatus map_draw(map_t self);
 
 #endif
 

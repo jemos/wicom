@@ -21,6 +21,7 @@
 #ifndef _APLIST_H
 #define _APLIST_H
 
+#include <stdbool.h>
 #include "wstatus.h"
 #include "ap.h"
 #include "jmlist.h"
@@ -102,6 +103,7 @@ wstatus apl_alloc(apl_t *apl);
 wstatus apl_free(apl_t apl);
 wstatus apl_attach_hook(apl_t self,APLHOOKROUTINE routine,void *param);
 wstatus apl_dettach_hook(apl_t self,APLHOOKROUTINE routine);
+wstatus apl_dump(apl_t apl);
 
 #endif
 
