@@ -21,7 +21,19 @@
 #ifndef _DEBUG_H
 #define _DEBUG_H
 
+/* this enum is to identify each module and will be useful for
+   debugging messages filtering. */
+typedef enum _debug_mod_t {
+	MOD_WICOM = 1,
+	MOD_WOPENGL = 2
+	MOD_CONSOLE = 4,
+	MOD_MAPMGR = 8,
+	MOD_APMGR = 16,
+	MOD_SCANMGR = 32
+} debug_mod_t;
+/* maximum modules for debug... 32 */
 
+void dbgprint(debug_mod_t module,const char *func,char *fmt);
 
 #endif
 
