@@ -21,13 +21,25 @@
 #ifndef _GEOMETRY_H
 #define _GEOMETRY_H
 
-typedef struct _v2d {
-	double x,y;
-} v2d;
+typedef double v1d_t;
 
-typedef struct _v3d {
+typedef struct _v2d_t {
+	double x,y;
+} v2d_t;
+
+typedef struct _v3d_t {
 	double x,y,z;
-} v3d;
+} v3d_t;
+
+typedef unsigned int v1u_t;
+
+typedef struct _v2u_t {
+	unsigned int x,y;
+} v2u_t;
+
+typedef struct _v3u_t {
+	unsigned int x,y,z;
+} v3u_t;
 
 #endif
 
