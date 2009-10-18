@@ -101,12 +101,12 @@ typedef struct _ap_action_set_t {
 
 typedef struct _ap_action_info_t {
 	union {
-		ap_action_info_alloc_t alloc;
-		ap_action_info_free_t free;
-		ap_action_info_preset_t set;
-		ap_action_info_postset_t set;
-		ap_action_info_preget_t get;
-		ap_action_info_postget_t get;
+		ap_action_alloc_t alloc;
+		ap_action_free_t free;
+		ap_action_preset_t set;
+		ap_action_postset_t set;
+		ap_action_preget_t get;
+		ap_action_postget_t get;
 	} data;
 	ap_action_t action;
 } ap_action_info_t;
@@ -119,8 +119,8 @@ wstatus ap_param_isset(ap_t ap,ap_params_t param,bool *set_flag);
 wstatus ap_param_changed(ap_t ap,ap_params_t param,bool *change_flag);
 wstatus ap_dump(ap_t self);
 wstatus ap_alloc(ap_t *ap);
-wstatus ap_free();
-wstatus ap_attach_hook(ap_t self,APHOOKROUTINE routine,void *param);
-wstatus ap_dettach_hook(ap_t self,APHOOKROUTINE routine);
+wstatus ap_free(ap_t self);
+wstatus ap_attach_hook(APHOOKROUTINE routine,void *param);
+wstatus ap_dettach_hook(APHOOKROUTINE routine);
 
 #endif // _AP_H
