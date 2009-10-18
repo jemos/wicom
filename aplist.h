@@ -101,8 +101,8 @@ wstatus apl_get_count(apl_t self,ap_index_t *count);
 wstatus apl_get(apl_t self,ap_index_t index,ap_t *ap);
 wstatus apl_alloc(apl_t *apl);
 wstatus apl_free(apl_t apl);
-wstatus apl_attach_hook(apl_t self,APLHOOKROUTINE routine,void *param);
-wstatus apl_dettach_hook(apl_t self,APLHOOKROUTINE routine);
+wstatus apl_attach_hook(APLHOOKROUTINE routine,void *param);
+wstatus apl_dettach_hook(APLHOOKROUTINE routine);
 wstatus apl_dump(apl_t apl);
 
 #endif
