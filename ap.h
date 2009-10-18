@@ -73,13 +73,13 @@ typedef enum _ap_action_t {
 	AP_ACTION_POSTDUMP
 } ap_action_t;
 
-typedef struct _ap_action_info_alloc_t {
+typedef struct _ap_action_alloc_t {
 	ap_t *new_ap;
-} ap_action_info_alloc_t;
+} ap_action_alloc_t;
 
-typedef struct _ap_action_free_alloc_t {
+typedef struct _ap_action_free_t {
 	ap_t *ap;
-} ap_action_info_free_t;
+} ap_action_free_t;
 
 typedef struct _ap_action_get_t {
 	ap_t *ap;
