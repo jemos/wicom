@@ -80,8 +80,8 @@ typedef struct _apwr_action_info_t {
 
 wstatus apwr_get(apwr_t self,apwr_param_t param,void *value_ptr,size_t value_size);
 wstatus apwr_set(apwr_t self,apwr_param_t param,void *value_ptr,size_t value_size);
-wstatus apwr_attach_hook(apwr_t self,APWRHOOKROUTINE routine,void *param);
-wstatus apwr_dettach_hook(apwr_t self,APWRHOOKROUTINE routine);
+wstatus apwr_attach_hook(APWRHOOKROUTINE routine,void *param);
+wstatus apwr_dettach_hook(APWRHOOKROUTINE routine);
 wstatus apwr_was_changed(apwr_t self,bool *changed_flag);
 wstatus apwr_isset(apwr_t self,bool *set_flag);
 wstatus apwr_dump(apwr_t self);

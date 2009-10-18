@@ -71,8 +71,8 @@ wstatus map_free(map_t self);
 wstatus map_alloc(map_t *map);
 wstatus map_config_load(cfgmgr_t cfgmgr,char *section,map_t *map);
 wstatus map_config_save(map_t self,cfgmgr_t cfgmgr,char *section);
-wstatus map_attach_hook(map_t self,MAPHOOKROUTINE routine,void *param);
-wstatus map_dettach_hook(map_t self,MAPHOOKROUTINE routine);
+wstatus map_attach_hook(MAPHOOKROUTINE routine,void *param);
+wstatus map_dettach_hook(MAPHOOKROUTINE routine);
 wstatus map_draw(map_t self);
 
 #endif

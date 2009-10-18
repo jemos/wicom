@@ -74,8 +74,8 @@ typedef wstatus (*APSHOOKROUTINE)(aps_action_info_t action_info,void *param);
 
 wstatus aps_get(aps_t self,char *serial);
 wstatus aps_set(aps_t self,char *serial,bool dup_string);
-wstatus aps_attach_hook(aps_t self,APSHOOKROUTINE routine,void *param);
-wstatus aps_dettach_hook(aps_t self,APSHOOKROUTINE routine);
+wstatus aps_attach_hook(APSHOOKROUTINE routine,void *param);
+wstatus aps_dettach_hook(APSHOOKROUTINE routine);
 wstatus aps_dump(aps_t self);
 wstatus aps_alloc(aps_t *aps);
 wstatus aps_free(aps_t self);
