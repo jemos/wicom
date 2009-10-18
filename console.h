@@ -24,11 +24,22 @@
 	we'll only have one console at the time, so its not usefull to have it in
 	class type. it won't be replicated, there's only one global console object.
 
+	Console object must be initialized before it can be used with the function
+	con_initialize. This function takes one initialization structure con_init_t which
+	has information required for console initialization like:
+	 - default callback routines for unrecognized command processing.
+	 - how big is history of commands?
+	 - flags: has history? save history in configuration?
+
+	The console object processes command lines that might came from different sources,
+	basicly whenever a module wants a command to be processed, calls con_process_line(...)
+	which will make console object to call the routine for that.
 */
 
 #ifndef _CONSOLE_H
 #define _CONSOLE_H
 
+#include "jmlist.h"
 
 #define CONSOLE_MAX_LINE_CHARS 512
 
@@ -55,10 +66,14 @@ typedef struct _con_t {
 	unsigned int cmd_history_index;
 } con_t;
 
+typedef struct _con_init_t {
+	int junk;
+} con_init_t;
 
-wstatus con_initialize();
-wstatus con_unintialize();
-wstatus con_process_keyup_h(int key);
+wstatus con_initialize(con_init_t *con_init);
+wstatus con_unintialize(void);
+wstatus con_process_key(int key);
+wstatus con_process_line(const char *line);
 wstatus con_insert_line(const char *line);
 wstatus con_draw_lines(void);
 wstatus con_draw_carret(void);
