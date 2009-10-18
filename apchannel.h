@@ -71,8 +71,8 @@ wstatus apch_free(apch_t self);
 wstatus apch_set(apch_t self,apch_action_t action,void *value_ptr,size_t value_size);
 wstatus apch_get(apch_t self,apch_action_t action,void *value_ptr,size_t value_size);
 wstatus apch_dump(apch_t self);
-wstatus apch_attach_hook(apch_t self,APCHHOOKROUTINE routine,void *param);
-wstatus apch_dettach_hook(apch_t self,APCHHOOKROUTINE routine);
+wstatus apch_attach_hook(APCHHOOKROUTINE routine,void *param);
+wstatus apch_dettach_hook(APCHHOOKROUTINE routine);
 wstatus apch_was_changed(apch_t self,bool *changed_flag);
 wstatus apch_isset(apch_t self,bool *set_flag);
 
