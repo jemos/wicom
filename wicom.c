@@ -18,3 +18,16 @@
 	Centro de Informatica do IST - Universidade Tecnica de Lisboa 
 */
 
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "cfgmgr.h"
+#include "mapmgr.h"
+#include "apmgr.h"
+#include "console.h"
+
+int main(int argc,char *argv[])
+{
+	return EXIT_SUCCESS;
+}
+
