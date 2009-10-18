@@ -21,7 +21,12 @@
 #ifndef _WSTATUS_H
 #define _WSTATUS_H
 
-typedef int wstatus;
+typedef enum _wstatus {
+	WSTATUS_SUCCESS,
+	WSTATUS_FAILURE,
+	WSTATUS_UNIMPLEMENTED,
+	WSTATUS_UNSUPPORTED
+} wstatus;
 
 #endif
 
