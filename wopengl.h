@@ -26,7 +26,6 @@
 #include "geometry.h"
 
 typedef struct _wgl_init_t {
-	int junk;
 	int argc;
 	char *argv[];
 } wgl_init_t;
@@ -66,6 +65,70 @@ typedef enum _wgl_line_format_t {
 	WGL_LINE_SOLID,
 	WGL_LINE_DOTTED
 } wgl_line_format_t;
+
+typedef enum _wgl_shape_type_t {
+	WGL_SHAPE_INVALID = 0,
+	WGL_SHAPE_CIRCLE,
+	WGL_SHAPE_ELLIPSE,
+	WGL_SHAPE_LINE,
+	WGL_SHAPE_POINT,
+	WGL_SHAPE_POLYLINE,
+	WGL_SHAPE_SPLINE,
+	WGL_SHAPE_ARC,
+	WGL_SHAPE_RECT
+} wgl_shape_type_t;
+
+typedef struct _wgl_circle_t {
+	v3d_t center;
+	v1d_t radius;
+} wgl_circle_t;
+
+typedef struct _wgl_ellipse_t {
+	v3d_t cp;
+	v3d_t ep;
+	v1d_t r;
+	v1d_t a1,a2;
+} wgl_ellipse_t;
+
+typedef struct _wgl_line_t {
+	v3d_t v1;
+	v3d_t v2;
+} wgl_line_t;
+
+typedef struct _wgl_polyline_t {
+	jmlist vlist;
+	unsigned int vcount;
+} wgl_polyline_t;
+
+typedef struct _wgl_spline_t {
+	jmlist vlist;
+	unsigned int degree;
+	unsigned int nKnots, nControl;
+} wgl_spline_t;
+
+typedef struct _wgl_arc_t {
+	v3d_t center;
+	v1d_t radius;
+	v1d_t a1,a2;
+} wgl_arc_t;
+
+typedef struct _wgl_rect_t {
+	v3d_t ul;
+	v3d_t br;
+} wgl_rect_t;
+
+typedef struct _wgl_shape_t {
+	union {
+		wgl_circle_t circle;
+		wgl_ellipse_t ellipse;
+		wgl_line_t line;
+		wgl_polyline_t polyline;
+		wgl_spline_t spline;
+		wgl_arc_t arc;
+		wgl_rect_t rect;
+	} data;
+	wgl_shape_type_t type;
+} wgl_shape_t;
 
 wstatus wgl_initialize(wgl_init_t *wgl_init);
 wstatus wgl_uninitialize(void);
