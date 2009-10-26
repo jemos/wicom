@@ -25,9 +25,13 @@
 #include "status.h"
 #include "geometry.h"
 
+#define DEFAULT_VIEWPORT_WIDTH 800
+#define DEFAULT_VIEWPORT_HEIGHT 600
+
 typedef struct _wgl_init_t {
 	int argc;
-	char *argv[];
+	char **argv;
+	v2u_t viewport;
 } wgl_init_t;
 
 typedef enum _wgl_ref_t {
