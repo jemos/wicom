@@ -25,15 +25,22 @@
    debugging messages filtering. */
 typedef enum _debug_mod_t {
 	MOD_WICOM = 1,
-	MOD_WOPENGL = 2
+	MOD_WOPENGL = 2,
 	MOD_CONSOLE = 4,
 	MOD_MAPMGR = 8,
 	MOD_APMGR = 16,
-	MOD_SCANMGR = 32
+	MOD_SCANMGR = 32,
+	MOD_DEBUG = 64
 } debug_mod_t;
 /* maximum modules for debug... 32 */
 
-void dbgprint(debug_mod_t module,const char *func,char *fmt);
+typedef struct _modname {
+	debug_mod_t mod;
+	const char *name;
+} modname;
+
+wstatus modt2name(debug_mod_t module,const char **name);
+void dbgprint(debug_mod_t module,const char *func,char *fmt,...);
 
 #endif
 

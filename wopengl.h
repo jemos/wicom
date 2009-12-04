@@ -22,7 +22,8 @@
 #define _WOPENGL_H
 
 #include <stdbool.h>
-#include "status.h"
+#include "jmlist.h"
+#include "wstatus.h"
 #include "geometry.h"
 
 #define DEFAULT_VIEWPORT_WIDTH 800
@@ -46,10 +47,11 @@ typedef enum _wgl_action_t {
 	WGL_ACTION_RESIZE
 } wgl_action_t;
 
-typedef enum _wgl_action_draw_t {
+typedef struct _wgl_action_draw_t {
+	int dummy;
 } wgl_action_draw_t;
 
-typedef enum _wgl_action_resize_t {
+typedef struct _wgl_action_resize_t {
 	v2u_t size_current;
 	v2u_t size_new;
 } wgl_action_resize_t;
@@ -140,7 +142,7 @@ wstatus wgl_draw_frame(void);
 wstatus wgl_create_window(void);
 wstatus wgl_main_loop(void);
 wstatus wgl_cicle_events(void);
-wstatus wgl_cursor_pos(v2d_t *pos,wgl_ref_t referential);
+wstatus wgl_mouse_pos(v2d_t *pos,wgl_ref_t referential);
 wstatus wgl_get_viewport_width(v1d_t *width);
 wstatus wgl_get_viewport_height(v1d_t *height);
 wstatus wgl_attach_hook(WGLHOOKROUTINE routine,void *param);

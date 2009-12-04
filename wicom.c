@@ -21,13 +21,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "cfgmgr.h"
-#include "mapmgr.h"
-#include "apmgr.h"
-#include "console.h"
+//#include "cfgmgr.h"
+//#include "mapmgr.h"
+//#include "apmgr.h"
+//#include "console.h"
+#include "wopengl.h"
 
 int main(int argc,char *argv[])
 {
+	wgl_init_t wgli = { .argc = argc, .argv = argv };
+
+	wgl_initialize(&wgli);
+
+	wgl_create_window();
+	wgl_main_loop();
+
+	wgl_uninitialize();
+
 	return EXIT_SUCCESS;
 }
 
