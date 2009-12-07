@@ -225,6 +225,7 @@ typedef struct _shapemgr_data_t {
 		shape_polygon_t polygon;
 		shape_text_t text;
 	} sdata;
+	shapeid_t	shapeid;
 } shapemgr_data;
 
 typedef enum _plantmgr_action_t {
