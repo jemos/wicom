@@ -26,6 +26,7 @@
 #include "wstatus.h"
 #include "geometry.h"
 
+#define SHAPEID_ZERO_OFFSET 1
 #define DEFAULT_VIEWPORT_WIDTH 800
 #define DEFAULT_VIEWPORT_HEIGHT 600
 
@@ -151,6 +152,90 @@ wstatus wgl_draw_shape(wgl_shape_t shape,v1d_t z_coord,wgl_ref_t referential);
 wstatus wgl_set_color(v3d_t color,v1d_t alpha);
 wstatus wgl_toggle_blending(bool blend);
 wstatus wgl_line_format(wgl_line_format_t line_format);
+
+typedef enum _layer_t {
+	LAYER_MAP,
+	LAYER_MAP_GUIDES,
+	LAYER_MAP_TEXT,
+	LAYER_CONTROL_GUIDES,
+	LAYER_CONTROL_TEXT
+} layer_t;
+
+typedef uint16_t shapeid_t;
+typedef uint16_t plantid_t;
+
+typedef enum _shapemgr_action_t {
+	SHAPE_ADD,
+	SHAPE_REMOVE,
+	SHAPE_GET,
+	SHAPE_SET
+} shapemgr_action_t;
+
+typedef struct _shape_point_t {
+	v3d_t	p1;
+	v1d_t	size;
+	v3d_t	color;
+} shape_point_t;
+
+typedef struct _shape_line_t {
+	v3d_t	p1,p2;
+	v3d_t	color;
+} shape_line_t;
+
+typedef struct _shape_polyline_t {
+	v3d_t	*point_list;
+	uint16_t point_count;
+	v3d_t	color;
+} shape_polyline_t;
+
+typedef struct _shape_polygon_t {
+	v3d_t	*point_list;
+	uint16_t point_count;
+	v3d_t	color;
+} shape_polygon_t;
+
+typedef enum _textfont_t {
+	TEXT_FONT_SMALL,
+	TEXT_FONT_NORMAL
+} textfont_t;
+
+typedef struct _shape_text_t {
+	char	*content;
+	v3d_t	position;
+	v3d_t	color;
+	textfont_t font;
+} shape_text_t;
+
+typedef enum _shapetype_t {
+	SHAPE_POINT,
+	SHAPE_LINE,
+	SHAPE_POLYLINE,
+	SHAPE_POLYGON,
+	SHAPE_TEXT
+} shapetype_t;
+
+typedef struct _shapemgr_data_t {
+	layer_t		layer;
+	plantid_t	plant;
+	shapetype_t type;
+	union {
+		shape_point_t point;
+		shape_line_t line;
+		shape_polyline_t polyline;
+		shape_polygon_t polygon;
+		shape_text_t text;
+	} sdata;
+} shapemgr_data;
+
+typedef enum _plantmgr_action_t {
+	PLANT_ADD,
+	PLANT_REMOVE,
+	PLANT_GET,
+	PLANT_SET
+} plantmgr_action_t;
+
+wstatus wgl_shapemgr(shapemgr_action_t action,shapemgr_data_t *data,shapeid_t *shapeid);
+wstatus wgl_plantmgr(plantmgr_action_t action,plantmgr_data_t *data,plantid_t *plantid);
 
 #endif
 

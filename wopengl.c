@@ -50,10 +50,18 @@ static bool init_ok = false;
 static bool window_ok = false;
 static jmlist hooklist;
 
+static uint16_t shapecount = 0;
+static jmlist shapelist;
+
 /* internal functions to wopengl module */
 GLvoid iwgl_draw_frame(GLvoid);
 GLvoid iwgl_resize_window(GLsizei width, GLsizei height);
 wstatus iwgl_viewport_init(void);
+wstatus wgl_shapeid_alloc(shapeid_t *shapeid);
+bool wgl_validate_shapeid(shapeid_t shapeid);
+bool wgl_validate_layer(layer_t layer);
+bool wgl_validate_shapetype(shapetype_t type);
+
 
 /*
    wgl_initialize
@@ -94,6 +102,16 @@ wgl_initialize(wgl_init_t *wgl_init)
 	dbgprint(MOD_WOPENGL,__func__,"current viewport size is (%d,%d)",
 			viewport.x,viewport.y);
 
+	dbgprint(MOD_WOPENGL,__func__,"creating jmlist for shapelist");
+
+	jmlist_params params = { .flags = JMLIST_INDEXED | JMLIST_IDX_USE_SHIFT };
+	if( jmlist_create(&shapelist,params) != JMLIST_ERROR_SUCCESS )
+	{
+		dbgprint(MOD_WOPENGL,__func__,"jmlist_create failed!");
+		dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
 	dbgprint(MOD_WOPENGL,__func__,"updating init flag to TRUE");
 	init_ok = true;
 
@@ -108,18 +126,6 @@ wgl_initialize(wgl_init_t *wgl_init)
 */
 wstatus
 wgl_uninitialize(void)
-{
-	dbgprint(MOD_WOPENGL,__func__,"unimplemented function called!");
-	return WSTATUS_UNIMPLEMENTED;
-}
-
-/*
-   wgl_draw_frame
-
-   Callback function for glut library to draw a single frame.
-   Client code should not call this function directly!
-*/
-wstatus wgl_draw_frame(void)
 {
 	dbgprint(MOD_WOPENGL,__func__,"unimplemented function called!");
 	return WSTATUS_UNIMPLEMENTED;
@@ -470,4 +476,174 @@ iwgl_draw_frame(GLvoid)
 	glutSwapBuffers();
 }
 
+/*
+	wgl_shapemgr
 
+	Possible actions are: SHAPE_ADD, SHAPE_REMOVE, SHAPE_GET, SHAPE_SET.
+
+	SHAPE_ADD requires a filled data and pointer to shapeid_t variable, which
+	will receive the shapeid as it is created. If shapeid = 0, this function
+	will not pass the shapeid to the caller.
+
+	The shapedata structure contains the layer identifier, plant identifier
+	which is only required for LAYER_MAP*, shape type and the shape specific
+	information (which depends on type). All these fields should be filled.
+
+	SHAPE_REMOVE requires shapeid to be filled with a shapeid of an existing
+	shape, shapedata argument is ignored.
+
+	SHAPE_GET requires shapeid to be filled with a shapeid of an existing
+	shape, shapedata pointing to a shapedata_t structure (contents ignored).
+	It will fill the shapedata structure with the current shape data. One
+	can then change that data and then call SHAPE_SET to modify some
+	properties.
+
+	SHAPE_SET requires shapeid to be filled with a shapeid of an existing
+	shape, shapedata poiting to a shapedata_t structure filled. It will
+	replace the current shape properties with those passed in. You can
+	even change the type of the shape, or the layer associated...
+
+	Returns:
+	WSTATUS_FAILURE on failure, WSTATUS_SUCCESS otherwise.
+
+	On failure, some possible errors are:
+	Invalid arguments passed in (data=0 or shapeid=0).
+	Invalid or unsupported action specified.
+*/
+wstatus
+wgl_shapemgr(shapemgr_action_t action,shapemgr_data_t *data,shapeid_t *shapeid)
+{
+	switch(action)
+	{
+		case SHAPE_ADD:
+			/* do some data validation */
+			if( !data || !shapeid )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Invalid data pointer or shapeid pointer");
+				break;
+			}
+			/* on the shape type */
+			if( !wgl_validate_shapetype(data->type) )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Invalid shape type in shapemgr_data structure! (type=%d)",data->type);
+				break;
+			}
+
+			/* check shape layer */
+			if( !wgl_validate_layer(data->layer) )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Invalid shape layer in shapemgr_data structure! (layer=%u)",data->layer);
+				break;
+			}
+
+			/* check plant identifier */
+			if( !wgl_validate_plant(data->plant) )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Invalid shape plant in shapemgr_data structure! (plant=%u)",data->plant);
+				break;
+			}
+
+			if( wgl_shapeid_alloc(shapeid) != WSTATUS_SUCCESS )
+				break;
+
+			/* finally add the shape to the list */
+			data->shapeid = *shapeid;
+			jmlist_insert(shapelist,data);
+			shapecount++;
+
+			dbgprint(MOD_WOPENGL,__func__,"Returning with success.");
+			return WSTATUS_SUCCESS;
+		case SHAPE_REMOVE:
+			if( !shapeid )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Invalid shapeid pointer");
+				break;
+			}
+
+			if( !wgl_validate_shapeid(*shapeid) )
+			{
+				/* shapeid doesn't exist... */
+				dbgprint(MOD_WOPENGL,__func__,"The shapeid specified (%d) doesn't exist in shapelist!",*shapeid);
+				break;
+			}
+			dbgprint(MOD_WOPENGL,__func__,"Returning with success.");
+			return WSTATUS_SUCCESS;
+		case SHAPE_GET:
+		case SHAPE_SET:
+			break;
+		default:
+			dbgprint(MOD_WOPENGL,__func__,"invalid or unsupported action (%d)",action);
+			dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+			return WSTATUS_FAILURE;
+	}
+	dbgprint(MOD_WOPENGL,__func__,"Returning with failure.");
+	return WSTATUS_FAILURE;
+}
+
+bool wgl_validate_shapetype(shapetype_t type)
+{
+	switch(type)
+	{
+		case SHAPE_POINT:
+		case SHAPE_LINE:
+		case SHAPE_POLYLINE:
+		case SHAPE_POLYGON:
+		case SHAPE_TEXT:
+			return true;
+		default:
+			return false;
+	}
+	return false;
+}
+
+bool wgl_validate_layer(layer_t layer)
+{
+	switch(layer)
+	{
+		case LAYER_MAP:
+		case LAYER_MAP_GUIDES:
+		case LAYER_MAP_TEXT:
+		case LAYER_CONTROL_GUIDES:
+		case LAYER_CONTROL_TEXT:
+			return true;
+		default:
+			return false;
+	}
+	return false;
+}
+
+bool wgl_validate_shapeid(shapeid_t shapeid)
+{
+	shapedata_t shape;
+	for( jmlist_index i = 0 ; i < MAX_SHAPE_COUNT ; i++ )
+	{
+		if( jmlist_get_by_index(shapelist,id,&shape) 
+				!= JMLIST_ERROR_SUCCESS)
+			return false;
+
+		if( shape->shapeid == shapeid )
+			return true;
+	}
+	return false;
+}
+
+wstatus
+wgl_shapeid_alloc(shapeid_t *shapeid)
+{
+	/* lookup a free shapeid... */
+	for( shapeid_t id = SHAPEID_ZERO_OFFSET ; id < MAX_SHAPEID ; id++ )
+	{
+		if( !wgl_validate_shapeid(id) )
+		{
+			dbgprint(MOD_WOPENGL,__func__,"Found free shapeid = %d",id);
+			*shapeid = id;
+			return WSTATUS_SUCCESS;
+		}
+	}
+
+	dbgprint(MOD_WOPENGL,__func__,"Unable to find a free shapeid!");
+	dbgprint(MOD_WOPENGL,__func__,"Returning with failure.");
+	return WSTATUS_FAILURE;
+}
+
+wstatus wgl_plantmgr(plantmgr_action_t action,plantmgr_data_t *data,plantid_t *plantid);
