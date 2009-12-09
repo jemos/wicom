@@ -48,20 +48,20 @@ static v2u_t viewport = { .x = DEFAULT_VIEWPORT_WIDTH,
 	.y = DEFAULT_VIEWPORT_HEIGHT};
 static bool init_ok = false;
 static bool window_ok = false;
-static jmlist hooklist;
 
-static uint16_t shapecount = 0;
 static jmlist shapelist;
+static jmlist plantlist;
 
 /* internal functions to wopengl module */
 GLvoid iwgl_draw_frame(GLvoid);
 GLvoid iwgl_resize_window(GLsizei width, GLsizei height);
 wstatus iwgl_viewport_init(void);
 wstatus wgl_shapeid_alloc(shapeid_t *shapeid);
-bool wgl_validate_shapeid(shapeid_t shapeid);
+wstatus wgl_validate_shapeid(shapeid_t shapeid,bool *result);
 bool wgl_validate_layer(layer_t layer);
 bool wgl_validate_shapetype(shapetype_t type);
-
+wstatus wgl_validate_plant(plantid_t plantid,bool *result);
+wstatus wgl_shapeid2index(shapeid_t shapeid,bool *result,jmlist_index *index);
 
 /*
    wgl_initialize
@@ -104,8 +104,8 @@ wgl_initialize(wgl_init_t *wgl_init)
 
 	dbgprint(MOD_WOPENGL,__func__,"creating jmlist for shapelist");
 
-	jmlist_params params = { .flags = JMLIST_INDEXED | JMLIST_IDX_USE_SHIFT };
-	if( jmlist_create(&shapelist,params) != JMLIST_ERROR_SUCCESS )
+	struct _jmlist_params params = { .flags = JMLIST_INDEXED | JMLIST_IDX_USE_SHIFT };
+	if( jmlist_create(&shapelist,&params) != JMLIST_ERROR_SUCCESS )
 	{
 		dbgprint(MOD_WOPENGL,__func__,"jmlist_create failed!");
 		dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
@@ -511,8 +511,11 @@ iwgl_draw_frame(GLvoid)
 	Invalid or unsupported action specified.
 */
 wstatus
-wgl_shapemgr(shapemgr_action_t action,shapemgr_data_t *data,shapeid_t *shapeid)
+wgl_shapemgr(shapemgr_action_t action,shapedata_t *data,shapeid_t *shapeid)
 {
+	bool result;
+	jmlist_status status;
+
 	switch(action)
 	{
 		case SHAPE_ADD:
@@ -537,20 +540,37 @@ wgl_shapemgr(shapemgr_action_t action,shapemgr_data_t *data,shapeid_t *shapeid)
 			}
 
 			/* check plant identifier */
-			if( !wgl_validate_plant(data->plant) )
+			if( wgl_validate_plant(data->plant,&result) == WSTATUS_SUCCESS )
 			{
-				dbgprint(MOD_WOPENGL,__func__,"Invalid shape plant in shapemgr_data structure! (plant=%u)",data->plant);
+				if( !result )
+				{
+					dbgprint(MOD_WOPENGL,__func__,"Invalid shape plant in shapemgr_data structure! (plant=%u)",data->plant);
+					break;
+				}
+			} else {
 				break;
 			}
 
-			if( wgl_shapeid_alloc(shapeid) != WSTATUS_SUCCESS )
+			shapeid_t shapeid_temp;
+			dbgprint(MOD_WOPENGL,__func__,"asking for a new shapeid");
+			if( wgl_shapeid_alloc(&shapeid_temp) != WSTATUS_SUCCESS )
 				break;
 
-			/* finally add the shape to the list */
-			data->shapeid = *shapeid;
-			jmlist_insert(shapelist,data);
-			shapecount++;
+			dbgprint(MOD_WOPENGL,__func__,"got new shapeid=%d updating shapeid argument",shapeid_temp);
+			*shapeid = shapeid_temp;
 
+			/* finally add the shape to the list */
+			dbgprint(MOD_WOPENGL,__func__,"updating data->shapeid to %d",shapeid_temp);
+			data->shapeid = shapeid_temp;
+
+			dbgprint(MOD_WOPENGL,__func__,"adding the new shape to shapelist using ptr=%p",data);
+			if( (status = jmlist_insert(shapelist,data)) != JMLIST_ERROR_SUCCESS )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"jmlist_insert returned error (%X)",status);
+				break;
+			}
+
+			dbgprint(MOD_WOPENGL,__func__,"jmlist_insert returned success");
 			dbgprint(MOD_WOPENGL,__func__,"Returning with success.");
 			return WSTATUS_SUCCESS;
 		case SHAPE_REMOVE:
@@ -560,23 +580,42 @@ wgl_shapemgr(shapemgr_action_t action,shapemgr_data_t *data,shapeid_t *shapeid)
 				break;
 			}
 
-			if( !wgl_validate_shapeid(*shapeid) )
+			/* check if shape exists */
+			if( wgl_validate_shapeid(*shapeid,&result) == WSTATUS_SUCCESS )
 			{
-				/* shapeid doesn't exist... */
-				dbgprint(MOD_WOPENGL,__func__,"The shapeid specified (%d) doesn't exist in shapelist!",*shapeid);
+				if( !result )
+				{
+					/* shapeid doesn't exist... */
+					dbgprint(MOD_WOPENGL,__func__,"The shapeid specified (%d) doesn't exist in shapelist!",*shapeid);
+					break;
+				}
+			} else break;
+
+			/* lookup shape index and remove it, for now these operations arent quite optimized... */
+			jmlist_index index;
+			if( wgl_shapeid2index(*shapeid,0,&index) != WSTATUS_SUCCESS )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"unable to translate shapeid to index?!");
 				break;
 			}
-			dbgprint(MOD_WOPENGL,__func__,"Returning with success.");
+
+			/* remove entry */
+			dbgprint(MOD_WOPENGL,__func__,"calling jmlist_remove_by_index...");
+// TODO		if( (status = jmlist_remove_by_index(shapelist,index)) != JMLIST_ERROR_SUCCESS )
+//			{
+//				dbgprint(MOD_WOPENGL,__func__,"jmlist_insert returned error (%X)",status);
+//				break;
+//			}
+//			dbgprint(MOD_WOPENGL,__func__,"removed shape successfuly");
+//			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
 			return WSTATUS_SUCCESS;
 		case SHAPE_GET:
 		case SHAPE_SET:
 			break;
 		default:
 			dbgprint(MOD_WOPENGL,__func__,"invalid or unsupported action (%d)",action);
-			dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
-			return WSTATUS_FAILURE;
 	}
-	dbgprint(MOD_WOPENGL,__func__,"Returning with failure.");
+	dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
 	return WSTATUS_FAILURE;
 }
 
@@ -612,33 +651,163 @@ bool wgl_validate_layer(layer_t layer)
 	return false;
 }
 
-bool wgl_validate_shapeid(shapeid_t shapeid)
+/*
+   wgl_validate_shapeid
+
+   Shapeid validation is used just to check if a specific shapeid exists in the list.
+   If caller also want the index of this specific shapeid caller should instead use the
+   alternative function, wgl_shapeid2index.
+
+   No result should be considered if this function returns failure, in other meaning,
+   result should only be considered if this function returns WSTATUS_SUCCCESS.
+*/
+wstatus
+wgl_validate_shapeid(shapeid_t shapeid,bool *result)
 {
-	shapedata_t shape;
-	for( jmlist_index i = 0 ; i < MAX_SHAPE_COUNT ; i++ )
+	shapedata_t *shape;
+
+	dbgprint(MOD_WOPENGL,__func__,"called with shapeid=%d and result=%p",shapeid,result);
+
+	if( !result )
 	{
-		if( jmlist_get_by_index(shapelist,id,&shape) 
+		dbgprint(MOD_WOPENGL,__func__,"invalid result bool pointer (result=0), check the arguments");
+		dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	dbgprint(MOD_WOPENGL,__func__,"updating result to false, the default value");
+	*result = false;
+
+	/*
+	   The shapelist is jmlist indexed with shift feature, meaning
+	   that even when an entry is removed there wont be any hole
+	   because entries will be shifted. With that we can parse the
+	   list simply from 0 to the number of entries.
+	 */
+
+	jmlist_index shapecount = 0;
+	jmlist_entry_count(shapelist,&shapecount);
+	dbgprint(MOD_WOPENGL,__func__,"shape count is %d",shapecount);
+
+	dbgprint(MOD_WOPENGL,__func__,"starting lookup look for shapeid (from 0 to %d)",shapecount);
+	for( jmlist_index i = 0 ; i < shapecount ; i++ )
+	{
+		if( jmlist_get_by_index(shapelist,i,(void*)&shape) 
 				!= JMLIST_ERROR_SUCCESS)
-			return false;
+		{
+			jmlist_index shapecountn = 0;
+			jmlist_entry_count(shapelist,&shapecount);
+			dbgprint(MOD_WOPENGL,__func__,"error retrieving entry from indexed list, "
+					"old shapecount=%d, i=%d, now shapecount=%d",shapecount,i,shapecountn);
+			dbgprint(MOD_WOPENGL,__func__,"if the old shapecount is different from now "
+					"shapecount you've some thread removing entries while this one is seeking throughout the list!");
+			dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+			return WSTATUS_FAILURE;
+		}
+
+		/* lets not blow-up the program with null-ptr memory access */
+		if( !shape )
+		{
+			dbgprint(MOD_WOPENGL,__func__,"jmlist access by index returned null ptr");
+			dbgprint(MOD_WOPENGL,__func__,"didn't you actually deactivated shift feature of shapelist?!");
+			dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+			return WSTATUS_FAILURE;
+		}
+
+		/* test for shapeid */
+		if( shape->shapeid == shapeid )
+		{
+			dbgprint(MOD_WOPENGL,__func__,"found shapeid=%d it has index=%d in shapelist",shapeid,i);
+			dbgprint(MOD_WOPENGL,__func__,"updating result argument to true");
+			*result = true;
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+		}
+	}
+
+	dbgprint(MOD_WOPENGL,__func__,"entry with shapeid=%d was not found in shapelist! (processed %d entries successfully)");	
+	dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+	return WSTATUS_SUCCESS;
+}
+
+wstatus
+wgl_shapeid2index(shapeid_t shapeid,bool *result,jmlist_index *index)
+{
+	dbgprint(MOD_WOPENGL,__func__,"called with shapeid=%d and index=%p",shapeid,index);
+
+	if( !index )
+	{
+		dbgprint(MOD_WOPENGL,__func__,"invalid index pointer specified (index=0) check the arguments");
+		dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	shapedata_t *shape;
+	jmlist_index shapecount;
+	dbgprint(MOD_WOPENGL,__func__,"starting loop from 0 to %d",shapecount);
+	for( jmlist_index i = 0 ; i < shapecount ; i++ )
+	{
+		if( jmlist_get_by_index(shapelist,i,(void*)&shape) 
+				!= JMLIST_ERROR_SUCCESS)
+		{
+			jmlist_index shapecountn = 0;
+			jmlist_entry_count(shapelist,&shapecountn);
+			dbgprint(MOD_WOPENGL,__func__,"error retrieving entry from indexed list, "
+					"old shapecount=%d, i=%d, now shapecount=%d",shapecount,i,shapecountn);
+			dbgprint(MOD_WOPENGL,__func__,"if the old shapecount is different from now "
+					"shapecount you've some thread removing entries while this one is seeking throughout the list!");
+			dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+			return WSTATUS_FAILURE;
+		}
+
+		/* lets not blow-up the program with null-ptr memory access */
+		if( !shape )
+		{
+			dbgprint(MOD_WOPENGL,__func__,"jmlist access by index returned null ptr");
+			dbgprint(MOD_WOPENGL,__func__,"didn't you actually deactivated shift feature of shapelist?!");
+			dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+			return WSTATUS_FAILURE;
+		}
 
 		if( shape->shapeid == shapeid )
-			return true;
+		{
+			dbgprint(MOD_WOPENGL,__func__,"found entry with shapeid=%d at index=%d",shapeid,i);
+			if( result )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"updating result argument to true");
+				*result = true;
+			}
+			dbgprint(MOD_WOPENGL,__func__,"updating index argument to %d",i);
+			*index = i;
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+		}
 	}
-	return false;
+
+	/* reached max number of shapes and didn't found the shapeid .. */
+	dbgprint(MOD_WOPENGL,__func__,"reached max index number of shape, didn't found shapeid=%d",shapeid);
+	dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+	return WSTATUS_FAILURE;
 }
 
 wstatus
 wgl_shapeid_alloc(shapeid_t *shapeid)
 {
 	/* lookup a free shapeid... */
+	dbgprint(MOD_WOPENGL,__func__,"starting loop from %d to %d",SHAPEID_ZERO_OFFSET,MAX_SHAPEID);
 	for( shapeid_t id = SHAPEID_ZERO_OFFSET ; id < MAX_SHAPEID ; id++ )
 	{
-		if( !wgl_validate_shapeid(id) )
+		bool result;
+
+		if( wgl_validate_shapeid(id,&result) == WSTATUS_SUCCESS )
 		{
-			dbgprint(MOD_WOPENGL,__func__,"Found free shapeid = %d",id);
-			*shapeid = id;
-			return WSTATUS_SUCCESS;
-		}
+			if( result == false )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Found free shapeid = %d",id);
+				*shapeid = id;
+				return WSTATUS_SUCCESS;
+			}
+		} else return WSTATUS_FAILURE;
 	}
 
 	dbgprint(MOD_WOPENGL,__func__,"Unable to find a free shapeid!");
@@ -646,4 +815,78 @@ wgl_shapeid_alloc(shapeid_t *shapeid)
 	return WSTATUS_FAILURE;
 }
 
-wstatus wgl_plantmgr(plantmgr_action_t action,plantmgr_data_t *data,plantid_t *plantid);
+wstatus
+wgl_validate_plant(plantid_t plantid,bool *result)
+{
+	plantdata_t *plant;
+
+	dbgprint(MOD_WOPENGL,__func__,"called with plantid=%d and result=%p",plantid,result);
+
+	if( !result )
+	{
+		dbgprint(MOD_WOPENGL,__func__,"invalid result bool pointer (result=0), check the arguments");
+		dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	dbgprint(MOD_WOPENGL,__func__,"updating result to false, the default value");
+	*result = false;
+
+	/*
+	   The plantlist is jmlist indexed with shift feature, meaning
+	   that even when an entry is removed there wont be any hole
+	   because entries will be shifted. With that we can parse the
+	   list simply from 0 to the number of entries.
+	 */
+
+	jmlist_index plantcount = 0;
+	jmlist_entry_count(plantlist,&plantcount);
+	dbgprint(MOD_WOPENGL,__func__,"plant count is %d",plantcount);
+
+	dbgprint(MOD_WOPENGL,__func__,"starting lookup look for plantid (from 0 to %d)",plantcount);
+	for( jmlist_index i = 0 ; i < plantcount ; i++ )
+	{
+		if( jmlist_get_by_index(plantlist,i,(void*)&plant) 
+				!= JMLIST_ERROR_SUCCESS)
+		{
+			jmlist_index plantcountn = 0;
+			jmlist_entry_count(plantlist,&plantcountn);
+			dbgprint(MOD_WOPENGL,__func__,"error retrieving entry from indexed list, "
+					"old plantcount=%d, i=%d, now plantcount=%d",plantcount,i,plantcountn);
+			dbgprint(MOD_WOPENGL,__func__,"if the old plantcount is different from now "
+					"plantcount you've some thread removing entries while this one is seeking throughout the list!");
+			dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+			return WSTATUS_FAILURE;
+		}
+
+		/* lets not blow-up the program with null-ptr memory access */
+		if( !plant )
+		{
+			dbgprint(MOD_WOPENGL,__func__,"jmlist access by index returned null ptr");
+			dbgprint(MOD_WOPENGL,__func__,"didn't you actually deactivated shift feature of plantlist?!");
+			dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+			return WSTATUS_FAILURE;
+		}
+
+		/* test for shapeid */
+		if( plant->plantid == plantid )
+		{
+			dbgprint(MOD_WOPENGL,__func__,"found plantid=%d it has index=%d in plantlist",plantid,i);
+			dbgprint(MOD_WOPENGL,__func__,"updating result argument to true");
+			*result = true;
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+		}
+	}
+
+	dbgprint(MOD_WOPENGL,__func__,"entry with plantid=%d was not found in plantlist! (processed %d entries successfully)");	
+	dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+	return WSTATUS_SUCCESS;
+}
+
+wstatus
+wgl_plantmgr(plantmgr_action_t action,plantdata_t *data,plantid_t *plantid)
+{
+	return WSTATUS_UNIMPLEMENTED;
+}
+

@@ -27,6 +27,8 @@
 #include "geometry.h"
 
 #define SHAPEID_ZERO_OFFSET 1
+#define MAX_SHAPEID (65536-1)
+
 #define DEFAULT_VIEWPORT_WIDTH 800
 #define DEFAULT_VIEWPORT_HEIGHT 600
 
@@ -226,7 +228,7 @@ typedef struct _shapemgr_data_t {
 		shape_text_t text;
 	} sdata;
 	shapeid_t	shapeid;
-} shapemgr_data;
+} shapedata_t;
 
 typedef enum _plantmgr_action_t {
 	PLANT_ADD,
@@ -235,8 +237,15 @@ typedef enum _plantmgr_action_t {
 	PLANT_SET
 } plantmgr_action_t;
 
-wstatus wgl_shapemgr(shapemgr_action_t action,shapemgr_data_t *data,shapeid_t *shapeid);
-wstatus wgl_plantmgr(plantmgr_action_t action,plantmgr_data_t *data,plantid_t *plantid);
+typedef struct _plantmgr_data_t {
+	char description[128];
+	v3d_t translate;
+	v3d_t scale;
+	plantid_t plantid;
+} plantdata_t;
+
+wstatus wgl_shapemgr(shapemgr_action_t action,shapedata_t *data,shapeid_t *shapeid);
+wstatus wgl_plantmgr(plantmgr_action_t action,plantdata_t *data,plantid_t *plantid);
 
 #endif
 
