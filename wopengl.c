@@ -601,16 +601,114 @@ wgl_shapemgr(shapemgr_action_t action,shapedata_t *data,shapeid_t *shapeid)
 
 			/* remove entry */
 			dbgprint(MOD_WOPENGL,__func__,"calling jmlist_remove_by_index...");
-// TODO		if( (status = jmlist_remove_by_index(shapelist,index)) != JMLIST_ERROR_SUCCESS )
-//			{
-//				dbgprint(MOD_WOPENGL,__func__,"jmlist_insert returned error (%X)",status);
-//				break;
-//			}
-//			dbgprint(MOD_WOPENGL,__func__,"removed shape successfuly");
-//			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			if( (status = jmlist_remove_by_index(shapelist,index)) != JMLIST_ERROR_SUCCESS )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"jmlist_insert returned error (%X)",status);
+				break;
+			}
+			dbgprint(MOD_WOPENGL,__func__,"removed shape successfuly");
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
 			return WSTATUS_SUCCESS;
 		case SHAPE_GET:
+			if( !shapeid )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Invalid shapeid pointer");
+				break;
+			}
+
+			if( !data )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Invalid data pointer, this should point to shapedata_t structure to be filled");
+				break;
+			}
+
+			/* check if shape exists */
+			if( wgl_validate_shapeid(*shapeid,&result) == WSTATUS_SUCCESS )
+			{
+				if( !result )
+				{
+					/* shapeid doesn't exist... */
+					dbgprint(MOD_WOPENGL,__func__,"The shapeid specified (%d) doesn't exist in shapelist!",*shapeid);
+					break;
+				}
+			} else break;
+
+			/* lookup shape index and remove it, for now these operations arent quite optimized... */
+			jmlist_index index;
+			if( wgl_shapeid2index(*shapeid,0,&index) != WSTATUS_SUCCESS )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"unable to translate shapeid to index?!");
+				break;
+			}
+
+			/* access the shapelist by index and get the shape */
+			void *ptr;
+			if( (status = jmlist_get_by_index(shapelist,index,&ptr)) != JMLIST_ERROR_SUCCESS )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"jmlist_get_by_index returned error (%X)",status);
+				break;
+			}
+
+			/* we got the shape in ptr pointer */
+			dbgprint(MOD_WOPENGL,__func__,"copying shapedata structure into data pointer...");
+			memcpy(data,ptr,sizeof(shapedata_t));
+			dbgprint(MOD_WOPENGL,__func__,"copied data successfuly");
+
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
 		case SHAPE_SET:
+			if( !shapeid )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Invalid shapeid pointer");
+				break;
+			}
+
+			if( !data )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Invalid data pointer, this should point to shapedata_t structure to be filled");
+				break;
+			}
+
+			/* check if shape exists */
+			if( wgl_validate_shapeid(*shapeid,&result) == WSTATUS_SUCCESS )
+			{
+				if( !result )
+				{
+					/* shapeid doesn't exist... */
+					dbgprint(MOD_WOPENGL,__func__,"The shapeid specified (%d) doesn't exist in shapelist!",*shapeid);
+					break;
+				}
+			} else break;
+
+			/* lookup shape index and remove it, for now these operations arent quite optimized... */
+			jmlist_index index;
+			if( wgl_shapeid2index(*shapeid,0,&index) != WSTATUS_SUCCESS )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"unable to translate shapeid to index?!");
+				break;
+			}
+
+			/* overwrite any shapeid specified in data structure */
+			dbgprint(MOD_WOPENGL,__func__,"Overwritting data->shapeid=%u to %u",data->shapeid,*shapeid);
+			data->shapeid = *shapeid;
+
+			/* get shape pointer */
+			void *ptr;
+			if( (status = jmlist_get_by_index(shapelist,index,&ptr)) != JMLIST_ERROR_SUCCESS )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"jmlist_get_by_index returned error (%X)",status);
+				break;
+			}
+
+			/* we got the shape in ptr pointer */
+			dbgprint(MOD_WOPENGL,__func__,"copying shapedata structure into data pointer...");
+			memcpy(data,ptr,sizeof(shapedata_t));
+			dbgprint(MOD_WOPENGL,__func__,"copied data successfully");
+
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+		case SHAPE_DUMP:
+			/* dump shape information */
 			break;
 		default:
 			dbgprint(MOD_WOPENGL,__func__,"invalid or unsupported action (%d)",action);
