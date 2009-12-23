@@ -1,0 +1,14 @@
+
+WOPENGL
+
+	wopengl module should export two main objects, the shape
+	manager and the plant manager, those are the ones used by
+	the modules.
+
+	wicom loads wopengl module and takes care of calling it for
+	unintialization but the design itself is using shapemgr and
+	plantmgr.
+
+	See wopengl.shapemgr and wopengl.plantmgr files for more
+	information about these objects.
+

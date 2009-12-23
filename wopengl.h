@@ -29,6 +29,9 @@
 #define SHAPEID_ZERO_OFFSET 1
 #define MAX_SHAPEID (65536-1)
 
+#define PLANTID_ZERO_OFFSET 1
+#define MAX_PLANTID (65536-1)
+
 #define DEFAULT_VIEWPORT_WIDTH 800
 #define DEFAULT_VIEWPORT_HEIGHT 600
 
@@ -167,6 +170,7 @@ typedef uint16_t shapeid_t;
 typedef uint16_t plantid_t;
 
 typedef enum _shapemgr_action_t {
+	SHAPE_DUMP,
 	SHAPE_ADD,
 	SHAPE_REMOVE,
 	SHAPE_GET,
@@ -218,7 +222,7 @@ typedef enum _shapetype_t {
 
 typedef struct _shapemgr_data_t {
 	layer_t		layer;
-	plantid_t	plant;
+	plantid_t	plantid;
 	shapetype_t type;
 	union {
 		shape_point_t point;
@@ -234,18 +238,27 @@ typedef enum _plantmgr_action_t {
 	PLANT_ADD,
 	PLANT_REMOVE,
 	PLANT_GET,
-	PLANT_SET
+	PLANT_SET,
+	PLANT_SETVISIBLE,
+	PLANT_SETSCALE,
+	PLANT_SETTRANSLATE
 } plantmgr_action_t;
 
-typedef struct _plantmgr_data_t {
+typedef enum _plant_visibility_t {
+	PLANT_VISIBLE,
+	PLANT_HIDDEN
+} plant_visibility_t;
+
+typedef struct _plantdata_t {
 	char description[128];
 	v3d_t translate;
 	v3d_t scale;
+	plant_visibility_t visibility;
 	plantid_t plantid;
 } plantdata_t;
 
 wstatus wgl_shapemgr(shapemgr_action_t action,shapedata_t *data,shapeid_t *shapeid);
-wstatus wgl_plantmgr(plantmgr_action_t action,plantdata_t *data,plantid_t *plantid);
+wstatus wgl_plantmgr(plantmgr_action_t action,void *data_ptr,size_t data_size,plantid_t *plantid);
 
 #endif
 

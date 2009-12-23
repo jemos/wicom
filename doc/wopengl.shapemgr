@@ -1,0 +1,131 @@
+
+SHAPE MANAGER
+
+	ADD shape to the scene, can be any layer and any shape.
+	each shape can have a name associated like a tag, but
+	thats optional. Every shape will have an unique ID associated.
+	Each shape can have specific callbacks associated, like,
+	a callback when the shape was selected,
+	a callback for when the shape is removed (pre-post?)
+	a callback for when the cursor is over the shape,
+	a callback for when the user clicks on the shape (mouse
+	down and mouse up events, to allow shape drag and drop).
+	The callback might return one of two codes: OK, and redraw
+	request. Redraw requests should be used when a specific
+	shape changes its properties like the position.
+
+	When the callback is called by wopengl, all the frame
+	drawing process is waiting for the callback to return,
+	so the code inside callbacks should be quick.
+
+	Each shape has a layer associated, these are:
+	  1) map layer (*)			LAYER_MAP
+	  2) map guides layer (*)	LAYER_MAP_GUIDES
+	  3) map text layer (*)		LAYER_MAP_TEXT
+	  4) control screen guides	LAYER_CONTROL_GUIDES
+	  5) control screen text	LAYER_CONTROL_TEXT
+
+	Where 5 is the highest level and 1 the lowest. Those with (*)
+	are layers in perspective mode. This will allow to have
+	both 3D maps and 2D maps, because in 3D one can put every
+	shape in z=0 and that should look like 2D viewed from top.
+
+	Each layer might have a scale/offset/rotation associated to
+	adjust the layer to other layer's position, supose one wanted
+	to adjust level 2 map of one building to match scale and
+	position with map of level 1 of the same building.
+
+	Basic type of shapes should be: (as first version..)
+	  i)	point (color),
+	  ii)	line (color),
+	  iii)	polyline (color),
+	  v)	polygon (filled polyline),
+	  vii)	text (big, small, color)
+
+	One module might also want to add specific attributes to
+	the shape, these will be of name-value pairs type. So
+	there should be functions to set/get attributes from each
+	shape. The values might be binary or ASCII so a length
+	of value argument should be used in SET function.
+
+	REMOVE shape by unique ID or by name/tag. Before removing
+	a shape this should call the remove callbacks registered.	
+	
+	Remember that shapes are just ways of representing the
+	information they should not contain the DATA of specific
+	objects, like access point power as attribute. That
+	kind of information should be saved in AP module zone.
+
+	No shape will be saved in disk, all shapes should be
+	generated at runtime by the modules.
+
+	The shape might have a plant identifier associated, in the
+	case it doesn't, shapedata.plantid should be 0. In the
+	case it does, when a plant changes state of visibility, all
+	the shapes associated also change to the same state of
+	visibility. When the plant is removed, all the shapes
+	associated with the plant are also removed.
+	
+	Shape vertex positions are always related to the base
+	origin and not to the plant center. So even tho the plant
+	might be scaled/translated, the caller module is the one
+	responsible of making the corrections on its own shape
+	positions.
+
+	SHAPE TYPES
+
+	- ALL
+		layerid_t layer, stores the associated layer of
+			where the shape's going to appear.
+
+		plantid_t plant, stores the plant identifier of
+			the shape. Remember that there can be various
+			plants in the plant layer.
+
+	- Point
+		v3d_t	point.p1 stores the point location
+		v1d_t	point.size stores point size
+		v3d_t	point.color
+
+	- Line
+		v3d_t	line.p1
+		v3d_t	line.p2
+		v3d_t	line.color
+
+	- Polyline
+		v3d_t *shapedata_t.point_list is a list of points,
+		the length of this list should be stored in
+		uint16_t *shapedata_t.point_count, the list is
+		freed when the shape is removed from the list using
+		free() function.
+
+		v3d_t		*polyline.point_list
+		uint16_t	polyline.point_count
+		v3d_t		polyline.color
+	
+	- Polygon
+		v3d_t	*polygon.point_list
+		uint16_t polygon.point_count
+		v3d_t	polygon.color
+
+	- Text
+		char	*text.content
+		v3d_t	text.location
+		v3d_t	text.color
+		textfont_t text.font
+
+		wopengl will free(text.content) when shape is removed.
+
+	GET
+
+	Shape GET operation allows one to obtain the shape data structure
+	from the shapeid, after that the caller is allowed to change all
+	the structure except shapeid field. After the changes are applied
+	to the structure, the caller should call SET operation with the
+	shape structure passed in argument.
+
+	SET
+
+	Shape SET operation allows one to change shape attributes. Shape
+	structure is required and shapeid must be associated with an
+	existing shape.

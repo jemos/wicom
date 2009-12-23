@@ -57,11 +57,13 @@ GLvoid iwgl_draw_frame(GLvoid);
 GLvoid iwgl_resize_window(GLsizei width, GLsizei height);
 wstatus iwgl_viewport_init(void);
 wstatus wgl_shapeid_alloc(shapeid_t *shapeid);
+wstatus wgl_plantid_alloc(plantid_t *plantid);
 wstatus wgl_validate_shapeid(shapeid_t shapeid,bool *result);
 bool wgl_validate_layer(layer_t layer);
 bool wgl_validate_shapetype(shapetype_t type);
-wstatus wgl_validate_plant(plantid_t plantid,bool *result);
+wstatus wgl_validate_plantid(plantid_t plantid,bool *result);
 wstatus wgl_shapeid2index(shapeid_t shapeid,bool *result,jmlist_index *index);
+wstatus wgl_plantid2index(plantid_t plantid,bool *result,jmlist_index *index);
 
 /*
    wgl_initialize
@@ -515,6 +517,8 @@ wgl_shapemgr(shapemgr_action_t action,shapedata_t *data,shapeid_t *shapeid)
 {
 	bool result;
 	jmlist_status status;
+	jmlist_index index;
+	void *ptr;
 
 	switch(action)
 	{
@@ -540,11 +544,11 @@ wgl_shapemgr(shapemgr_action_t action,shapedata_t *data,shapeid_t *shapeid)
 			}
 
 			/* check plant identifier */
-			if( wgl_validate_plant(data->plant,&result) == WSTATUS_SUCCESS )
+			if( wgl_validate_plantid(data->plantid,&result) == WSTATUS_SUCCESS )
 			{
 				if( !result )
 				{
-					dbgprint(MOD_WOPENGL,__func__,"Invalid shape plant in shapemgr_data structure! (plant=%u)",data->plant);
+					dbgprint(MOD_WOPENGL,__func__,"Invalid shape plantid in shapemgr_data structure! (plant=%u)",data->plantid);
 					break;
 				}
 			} else {
@@ -592,7 +596,6 @@ wgl_shapemgr(shapemgr_action_t action,shapedata_t *data,shapeid_t *shapeid)
 			} else break;
 
 			/* lookup shape index and remove it, for now these operations arent quite optimized... */
-			jmlist_index index;
 			if( wgl_shapeid2index(*shapeid,0,&index) != WSTATUS_SUCCESS )
 			{
 				dbgprint(MOD_WOPENGL,__func__,"unable to translate shapeid to index?!");
@@ -634,7 +637,6 @@ wgl_shapemgr(shapemgr_action_t action,shapedata_t *data,shapeid_t *shapeid)
 			} else break;
 
 			/* lookup shape index and remove it, for now these operations arent quite optimized... */
-			jmlist_index index;
 			if( wgl_shapeid2index(*shapeid,0,&index) != WSTATUS_SUCCESS )
 			{
 				dbgprint(MOD_WOPENGL,__func__,"unable to translate shapeid to index?!");
@@ -642,7 +644,6 @@ wgl_shapemgr(shapemgr_action_t action,shapedata_t *data,shapeid_t *shapeid)
 			}
 
 			/* access the shapelist by index and get the shape */
-			void *ptr;
 			if( (status = jmlist_get_by_index(shapelist,index,&ptr)) != JMLIST_ERROR_SUCCESS )
 			{
 				dbgprint(MOD_WOPENGL,__func__,"jmlist_get_by_index returned error (%X)",status);
@@ -693,7 +694,6 @@ wgl_shapemgr(shapemgr_action_t action,shapedata_t *data,shapeid_t *shapeid)
 			data->shapeid = *shapeid;
 
 			/* get shape pointer */
-			void *ptr;
 			if( (status = jmlist_get_by_index(shapelist,index,&ptr)) != JMLIST_ERROR_SUCCESS )
 			{
 				dbgprint(MOD_WOPENGL,__func__,"jmlist_get_by_index returned error (%X)",status);
@@ -842,6 +842,12 @@ wgl_shapeid2index(shapeid_t shapeid,bool *result,jmlist_index *index)
 
 	shapedata_t *shape;
 	jmlist_index shapecount;
+
+	if( jmlist_entry_count(shapelist,&shapecount) != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+	
 	dbgprint(MOD_WOPENGL,__func__,"starting loop from 0 to %d",shapecount);
 	for( jmlist_index i = 0 ; i < shapecount ; i++ )
 	{
@@ -914,7 +920,7 @@ wgl_shapeid_alloc(shapeid_t *shapeid)
 }
 
 wstatus
-wgl_validate_plant(plantid_t plantid,bool *result)
+wgl_validate_plantid(plantid_t plantid,bool *result)
 {
 	plantdata_t *plant;
 
@@ -938,7 +944,12 @@ wgl_validate_plant(plantid_t plantid,bool *result)
 	 */
 
 	jmlist_index plantcount = 0;
-	jmlist_entry_count(plantlist,&plantcount);
+	
+	if( jmlist_entry_count(plantlist,&plantcount) != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
 	dbgprint(MOD_WOPENGL,__func__,"plant count is %d",plantcount);
 
 	dbgprint(MOD_WOPENGL,__func__,"starting lookup look for plantid (from 0 to %d)",plantcount);
@@ -982,9 +993,458 @@ wgl_validate_plant(plantid_t plantid,bool *result)
 	return WSTATUS_SUCCESS;
 }
 
+/*
+   wgl_plantmgr
+
+   Plant Manager routine, this function provides various actions that can be applied to plants.
+
+   PLANT_ADD
+	- data_ptr points to plantdata_t structure, all members should be prefilled except plantid.
+	- plantid should point to plantid_t type.
+	- data_size should be sizeof(plantdata_t).
+
+   PLANT_REMOVE
+*/
 wstatus
-wgl_plantmgr(plantmgr_action_t action,plantdata_t *data,plantid_t *plantid)
+wgl_plantmgr(plantmgr_action_t action,void *data_ptr,size_t data_size,plantid_t *plantid)
 {
-	return WSTATUS_UNIMPLEMENTED;
+	bool result;
+	jmlist_status status;
+	plantdata_t *plant;
+	jmlist_index index;
+
+	dbgprint(MOD_WOPENGL,__func__,"called with action=%d, data_ptr=%p, data_size=%u,plantid=%p",action,data_ptr,data_size,plantid);
+
+	switch(action)
+	{
+		case PLANT_ADD:
+
+			/* validate data */
+			if( !data_ptr ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid data_ptr specified (data_ptr=0)");
+				break;
+			}
+
+			/* expected data is pointer to plantdata_t */
+			if( data_size != sizeof(plantdata_t) ) {
+				dbgprint(MOD_WOPENGL,__func__,"expected data size was %d and got %d bytes",sizeof(plantdata_t),data_size);
+				break;
+			}
+
+			/* update local pointer to plantdata_t */
+			plant = (plantdata_t*)data_ptr;
+
+			/* get a new plantid for this plant */
+			plantid_t plantid_temp;
+			dbgprint(MOD_WOPENGL,__func__,"asking for a new plantid");
+			if( wgl_plantid_alloc(&plantid_temp) != WSTATUS_SUCCESS )
+				break;
+
+			dbgprint(MOD_WOPENGL,__func__,"got new plantid=%d updating plantid argument",plantid_temp);
+			*plantid = plantid_temp;
+
+			/* finally add the shape to the list */
+			dbgprint(MOD_WOPENGL,__func__,"updating data->plantid to %d",plantid_temp);
+			plant->plantid = plantid_temp;
+
+			dbgprint(MOD_WOPENGL,__func__,"adding the new plant to plantlist using ptr=%p",plant);
+			if( (status = jmlist_insert(plantlist,plant)) != JMLIST_ERROR_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"jmlist_insert returned error (%X)",status);
+				break;
+			}
+
+			dbgprint(MOD_WOPENGL,__func__,"plant inserted successfuly");
+
+			dbgprint(MOD_WOPENGL,__func__,"Returning with success.");
+			return WSTATUS_SUCCESS;
+			
+			break;
+
+		case PLANT_GET:
+			
+			if( !plantid ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid *plantid specified (*plantid=0)");
+				break; /* this will return with error */
+			}
+
+			if( wgl_validate_plantid(*plantid,&result) != WSTATUS_SUCCESS )
+			{
+				if( result == false ) {
+					dbgprint(MOD_WOPENGL,__func__,"plantid is not valid! (plantid=%u)",*plantid);
+					break;
+				}
+			} else
+				break; /* wgl_validate_plant failed... */
+
+			/* convert plantid to index for now these operations are not that optimized */
+			if( wgl_plantid2index(*plantid,0,&index) != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"unable to translate plantid to index?!");
+				break;
+			}
+
+			/* check data_ptr and data_size arguments */
+
+			if( !data_ptr ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid data_ptr specified (data_ptr=0)");
+				break;
+			}
+
+			if( data_size != sizeof(plantdata_t) ) {
+				dbgprint(MOD_WOPENGL,__func__,"unexpected data_size used=%u, expected=%u",data_size,sizeof(plantdata_t));
+				break;
+			}
+
+			/* get plantdata_t structure pointer */
+			if( jmlist_get_by_index(plantlist,index,(void*)&plant) != JMLIST_ERROR_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"indexed access on plantlist failed for entry with index=%u!",index);
+				break;
+			}
+
+			dbgprint(MOD_WOPENGL,__func__,"copying plant data structure to data_ptr...");
+			memcpy(data_ptr,plant,sizeof(plantdata_t));
+			dbgprint(MOD_WOPENGL,__func__,"copied successfully");
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+
+			break;
+		case PLANT_SET:
+
+			if( !plantid ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid *plantid specified (*plantid=0)");
+				break; /* this will return with error */
+			}
+
+			if( wgl_validate_plantid(*plantid,&result) != WSTATUS_SUCCESS )
+			{
+				if( result == false ) {
+					dbgprint(MOD_WOPENGL,__func__,"plantid is not valid! (plantid=%u)",*plantid);
+					break;
+				}
+			} else
+				break; /* wgl_validate_plant failed... */
+
+			/* convert plantid to index for now these operations are not that optimized */
+			if( wgl_plantid2index(*plantid,0,&index) != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"unable to translate plantid to index?!");
+				break;
+			}
+
+			/* check data_ptr and data_size arguments */
+
+			if( !data_ptr ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid data_ptr specified (data_ptr=0)");
+				break;
+			}
+
+			if( data_size != sizeof(plantdata_t) ) {
+				dbgprint(MOD_WOPENGL,__func__,"unexpected data_size used=%u, expected=%u",data_size,sizeof(plantdata_t));
+				break;
+			}
+
+			plant = (plantdata_t*)data_ptr;
+			dbgprint(MOD_WOPENGL,__func__,"fixing plantid from received plant data structure from %u to %u",
+					plant->plantid, *plantid);
+
+			plant->plantid = *plantid;
+
+			dbgprint(MOD_WOPENGL,__func__,"updating plant data structure");
+
+			if( jmlist_replace_by_index(plantlist,index,plant) != JMLIST_ERROR_SUCCESS ) {
+				break;
+			}
+
+			dbgprint(MOD_WOPENGL,__func__,"updated successfully");
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+			break;
+
+		case PLANT_REMOVE:
+
+			if( !plantid ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid *plantid specified (*plantid=0)");
+				break; /* this will return with error */
+			}
+
+			if( wgl_validate_plantid(*plantid,&result) != WSTATUS_SUCCESS )
+			{
+				if( result == false ) {
+					dbgprint(MOD_WOPENGL,__func__,"plantid is not valid! (plantid=%u)",*plantid);
+					break;
+				}
+			} else
+				break; /* wgl_validate_plant failed... */
+
+			/* convert plantid to index for now these operations are not that optimized */
+			if( wgl_plantid2index(*plantid,0,&index) != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"unable to translate plantid to index?!");
+				break;
+			}
+
+			/* remove plant */
+			dbgprint(MOD_WOPENGL,__func__,"calling jmlist_remove_by_index...");
+			if( (status = jmlist_remove_by_index(plantlist,index)) != JMLIST_ERROR_SUCCESS )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"jmlist_insert returned error (%X)",status);
+				break;
+			}
+
+			dbgprint(MOD_WOPENGL,__func__,"removed plant successfuly");
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+			break;
+		
+		case PLANT_SETVISIBLE:
+
+			if( !plantid ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid *plantid specified (*plantid=0)");
+				break; /* this will return with error */
+			}
+
+			if( wgl_validate_plantid(*plantid,&result) != WSTATUS_SUCCESS )
+			{
+				if( result == false ) {
+					dbgprint(MOD_WOPENGL,__func__,"plantid is not valid! (plantid=%u)",*plantid);
+					break;
+				}
+			} else
+				break; /* wgl_validate_plant failed... */
+
+			/* convert plantid to index for now these operations are not that optimized */
+			if( wgl_plantid2index(*plantid,0,&index) != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"unable to translate plantid to index?!");
+				break;
+			}
+
+			/* check data_ptr and data_size arguments */
+
+			if( !data_ptr ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid data_ptr specified (data_ptr=0)");
+				break;
+			}
+
+			if( data_size != sizeof(plant_visibility_t) ) {
+				dbgprint(MOD_WOPENGL,__func__,"unexpected data_size used=%u, expected=%u",data_size,sizeof(plant_visibility_t));
+				break;
+			}
+
+			/* now update plant visibility parameter */
+
+			plant_visibility_t *visibility_new = (plant_visibility_t*)data_ptr;
+			if( jmlist_get_by_index(plantlist,index,(void*)&plant) != JMLIST_ERROR_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"indexed access on plantlist failed for entry with index=%u!",index);
+				break;
+			}
+
+			dbgprint(MOD_WOPENGL,__func__,"got plant=%p updating visibility from %u to %u",
+					(void*)plant,plant->visibility,*visibility_new);
+			plant->visibility = *visibility_new;
+			dbgprint(MOD_WOPENGL,__func__,"updated successfuly, new visibility is now %u",
+					plant->visibility);
+
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+
+			break;
+		case PLANT_SETSCALE:
+			if( !plantid ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid *plantid specified (*plantid=0)");
+				break; /* this will return with error */
+			}
+
+			if( wgl_validate_plantid(*plantid,&result) != WSTATUS_SUCCESS )
+			{
+				if( result == false ) {
+					dbgprint(MOD_WOPENGL,__func__,"plantid is not valid! (plantid=%u)",*plantid);
+					break;
+				}
+			} else
+				break; /* wgl_validate_plant failed... */
+
+			/* convert plantid to index for now these operations are not that optimized */
+			if( wgl_plantid2index(*plantid,0,&index) != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"unable to translate plantid to index?!");
+				break;
+			}
+
+			/* check data_ptr and data_size arguments */
+
+			if( !data_ptr ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid data_ptr specified (data_ptr=0)");
+				break;
+			}
+
+			if( data_size != sizeof(v3d_t) ) {
+				dbgprint(MOD_WOPENGL,__func__,"unexpected data_size used=%u, expected=%u",data_size,sizeof(v3d_t));
+				break;
+			}
+
+			/* now update plant visibility parameter */
+
+			v3d_t *scale = (v3d_t*)data_ptr;
+			if( jmlist_get_by_index(plantlist,index,(void*)&plant) != JMLIST_ERROR_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"indexed access on plantlist failed for entry with index=%u!",index);
+				break;
+			}
+
+			dbgprint(MOD_WOPENGL,__func__,"got plant=%p updating scale from (%0.2g, %0.2g, %0.2g) to (%0.2g, %0.2g, %0.2g)",
+					(void*)plant,plant->scale.x,plant->scale.y,plant->scale.z,scale->x,scale->y,scale->z);
+
+			memcpy(&plant->scale,scale,sizeof(v3d_t));
+
+			dbgprint(MOD_WOPENGL,__func__,"updated successfuly, new visibility is now (%0.2g, %0.2g, %0.2g)",
+					plant->scale.x,plant->scale.y,plant->scale.z);
+
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+			break;
+		case PLANT_SETTRANSLATE:
+			if( !plantid ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid *plantid specified (*plantid=0)");
+				break; /* this will return with error */
+			}
+
+			if( wgl_validate_plantid(*plantid,&result) != WSTATUS_SUCCESS )
+			{
+				if( result == false ) {
+					dbgprint(MOD_WOPENGL,__func__,"plantid is not valid! (plantid=%u)",*plantid);
+					break;
+				}
+			} else
+				break; /* wgl_validate_plant failed... */
+
+			/* convert plantid to index for now these operations are not that optimized */
+			if( wgl_plantid2index(*plantid,0,&index) != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"unable to translate plantid to index?!");
+				break;
+			}
+
+			/* check data_ptr and data_size arguments */
+
+			if( !data_ptr ) {
+				dbgprint(MOD_WOPENGL,__func__,"invalid data_ptr specified (data_ptr=0)");
+				break;
+			}
+
+			if( data_size != sizeof(v3d_t) ) {
+				dbgprint(MOD_WOPENGL,__func__,"unexpected data_size used=%u, expected=%u",data_size,sizeof(v3d_t));
+				break;
+			}
+
+			/* now update plant visibility parameter */
+
+			v3d_t *translate = (v3d_t*)data_ptr;
+			if( jmlist_get_by_index(plantlist,index,(void*)&plant) != JMLIST_ERROR_SUCCESS ) {
+				dbgprint(MOD_WOPENGL,__func__,"indexed access on plantlist failed for entry with index=%u!",index);
+				break;
+			}
+
+			dbgprint(MOD_WOPENGL,__func__,"got plant=%p updating translate from (%0.2g, %0.2g, %0.2g) to (%0.2g, %0.2g, %0.2g)",
+					(void*)plant,plant->translate.x,plant->translate.y,plant->translate.z,translate->x,translate->y,translate->z);
+
+			memcpy(&plant->translate,translate,sizeof(v3d_t));
+
+			dbgprint(MOD_WOPENGL,__func__,"updated successfuly, new visibility is now (%0.2g,%0.2g,%0.2g)",
+					plant->translate.x,plant->translate.y,plant->translate.z);
+
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+			break;
+		default:
+			dbgprint(MOD_WOPENGL,__func__,"invalid or unsupported action (%d)",action);
+	}
+
+	dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+	return WSTATUS_FAILURE;;
+}
+
+wstatus
+wgl_plantid_alloc(plantid_t *plantid)
+{
+	/* lookup a free shapeid... */
+	dbgprint(MOD_WOPENGL,__func__,"starting loop from %d to %d",PLANTID_ZERO_OFFSET,MAX_PLANTID);
+	for( plantid_t id = PLANTID_ZERO_OFFSET ; id < MAX_PLANTID ; id++ )
+	{
+		bool result;
+
+		if( wgl_validate_plantid(id,&result) == WSTATUS_SUCCESS )
+		{
+			if( result == false )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"Found free plantid = %d",id);
+				*plantid = id;
+				return WSTATUS_SUCCESS;
+			}
+		} else return WSTATUS_FAILURE;
+	}
+
+	dbgprint(MOD_WOPENGL,__func__,"Unable to find a free plantid!");
+	dbgprint(MOD_WOPENGL,__func__,"Returning with failure.");
+	return WSTATUS_FAILURE;
+}
+
+wstatus
+wgl_plantid2index(plantid_t plantid,bool *result,jmlist_index *index)
+{
+	dbgprint(MOD_WOPENGL,__func__,"called with plantid=%d and index=%p",plantid,index);
+
+	if( !index )
+	{
+		dbgprint(MOD_WOPENGL,__func__,"invalid index pointer specified (index=0) check the arguments");
+		dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	plantdata_t *plant;
+	jmlist_index plantcount;
+
+	if( jmlist_entry_count(plantlist,&plantcount) != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	dbgprint(MOD_WOPENGL,__func__,"starting loop from 0 to %d",plantcount);
+	for( jmlist_index i = 0 ; i < plantcount ; i++ )
+	{
+		if( jmlist_get_by_index(plantlist,i,(void*)&plant) 
+				!= JMLIST_ERROR_SUCCESS)
+		{
+			jmlist_index plantcountn = 0;
+			jmlist_entry_count(plantlist,&plantcountn);
+			dbgprint(MOD_WOPENGL,__func__,"error retrieving entry from indexed list, "
+					"old plantcount=%d, i=%d, now plantcount=%d",plantcount,i,plantcountn);
+			dbgprint(MOD_WOPENGL,__func__,"if the old plantcount is different from now "
+					"plantcount you've some thread removing entries while this one is seeking throughout the list!");
+			dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+			return WSTATUS_FAILURE;
+		}
+
+		/* lets not blow-up the program with null-ptr memory access */
+		if( !plant )
+		{
+			dbgprint(MOD_WOPENGL,__func__,"jmlist access by index returned null ptr");
+			dbgprint(MOD_WOPENGL,__func__,"didn't you actually deactivated shift feature of shapelist?!");
+			dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+			return WSTATUS_FAILURE;
+		}
+
+		if( plant->plantid == plantid )
+		{
+			dbgprint(MOD_WOPENGL,__func__,"found entry with plantid=%d at index=%d",plantid,i);
+			if( result )
+			{
+				dbgprint(MOD_WOPENGL,__func__,"updating result argument to true");
+				*result = true;
+			}
+			dbgprint(MOD_WOPENGL,__func__,"updating index argument to %d",i);
+			*index = i;
+			dbgprint(MOD_WOPENGL,__func__,"returning with success.");
+			return WSTATUS_SUCCESS;
+		}
+	}
+
+	/* reached max number of shapes and didn't found the shapeid .. */
+	dbgprint(MOD_WOPENGL,__func__,"reached max index number of plant, didn't found plantid=%d",plantid);
+	dbgprint(MOD_WOPENGL,__func__,"returning with failure.");
+	return WSTATUS_FAILURE;
 }
 

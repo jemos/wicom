@@ -1,0 +1,32 @@
+
+PLANT MANAGER
+
+
+	Possible actions should be to change visibility options of specific
+	plants, add/remove plants and change some properties.
+
+	Plants are on the first layer, and should be drawn in silver color.
+	Its possible to hide specific plants and show others using
+	visibility options of the plant.
+
+	Other properties of the plant are the location and orientation.
+
+	ADD plant, returns plant identifier for future reference, it should
+	be used to identify the plant whenever needed, also it should be
+	associated with the map. The plant data includes:
+	 - offset to the origin and scale.
+
+	REMOVE plant, suppling the plant identifier one can remove the
+	plant from the plant manager. 
+	
+	CHANGE VISIBILITY OPTIONS allowing one to change a plant to visible
+	invisble or blended.
+
+	CHANGE SCALE allows one to change the scaling vector of this plant,
+	that scale will be applied to the shapes associated with the plant.
+
+	CHANGE POSITION vector allows one to change the position vector of
+	a specific plant, that translation will also be applied to the
+	shapes associated to the plant.
+
+	The wopengl module, first scales and then translates.

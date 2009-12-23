@@ -1,0 +1,52 @@
+
+MAIN
+
+Start by reading the command line arguments and save the information.
+Possible arguments can be specified by long or short codes depeding on
+the option.
+
+ -c/--config		configuration file/folder, eg. --config=/etc/wicom/wicom.conf
+					wicom will use the folder of the configuration file as the folder
+					of the rest of the configuration files (maps, etc.)
+					default cfg file is /etc/wicom/wicom.conf .
+
+ -d/--debug			debug mode ON.
+
+ -s/--syntax-check	syntax check of configuration only.
+
+ --verbose			verbose mode ON.
+
+ -v					display version and quit.
+
+After reading the arguments load the configurations using cfgmgr:
+
+cfgmgr_init.root_folder = "/etc/wicom/";
+cfgmgr_initialize(cfgmgr_init_t cfgmgr_init);
+cfgmgr_alloc(cfgmgr_t *cfgmgr);
+cfgmgr_load(cfgmgr,0,"wicom.conf");
+
+check return of cfgmgr_load ...
+
+that will load main wicom configuration options. Now each module should
+be initialized: mapmgr, apmgr, wopengl, console, ...
+ 1) wopengl (doesn't depend on any module)
+ 2) console (depends on wopengl)
+ 3) mapmgr (depends on wopengl and console)
+ 4) apmgr (depends on wopengl and console)
+ 5) scanmgr (depends on map, console, wopengl)
+ 6) obsmgr (depends on map, console, wopengl)
+
+wopengl_initialize(wgl_init_t wgl_init);
+
+Console initialization function must contain the default callback routines
+for unrecognized commands or special character commands (CTRL+C?).
+
+con_initialize(con_init_t con_init);
+con_add_command('help',wicom_cmd(),param,flags -> PASS_FULL_COMMAND)
+con_add_command('exit',wicom_cmd(),param,flags)
+con_add_command..
+con_add_input_channel(int fd,char* name);
+con_add_output_channel(int fd,char * name);
+
+mapmgr_initialize(mapmgr_init_t mapmgr_init);
+apmgr_init(
