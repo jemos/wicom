@@ -26,7 +26,7 @@ wthread_create(wthread_routine_t routine,void *param,wthread_t *thread)
 {
 #if THREAD_API == 1
 	int status;
-	status = pthread_create(thread,NULL,routine,param);
+	status = pthread_create(thread,NULL,(void*(*)(void*))routine,param);
 
 	switch(status)
 	{

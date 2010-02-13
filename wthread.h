@@ -25,6 +25,7 @@
 
 #if (defined POSH_OS_OSX || defined POSH_OS_LINUX)
 #include <pthread.h>
+#include <errno.h>
 #define THREAD_API 1 /* Linux or MacOS pthread */
 #endif
 
@@ -45,7 +46,7 @@ typedef pthread_t wthread_t;
 typedef HANDLE wthread_t;
 #endif
 
-typedef void (POSH_CDECL *wthread_routine_t)(void *param);
+typedef void (*wthread_routine_t)(void *param);
 
 wstatus wthread_create(wthread_routine_t routine,void *param,wthread_t *thread);
 wstatus wthread_wait(wthread_t thread);
