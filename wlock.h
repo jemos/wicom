@@ -36,8 +36,11 @@
 #ifndef _WLOCK_H
 #define _WLOCK_H
 
-#if (defined POSH_OS_LINUX || defined POSH_OS_MACOSX)
+#include "posh.h"
+
+#if (defined POSH_OS_LINUX || defined POSH_OS_OSX)
 #include <pthread.h>
+#include <errno.h>
 #define LOCK_API 1
 #endif
 
@@ -57,9 +60,9 @@ typedef HANDLE wlock_t;
 #endif
 
 wstatus wlock_create(wlock_t *lock);
-wstatus wlock_free(wlock_t lock);
-wstatus wlock_acquire(wlock_t lock);
-wstatus wlock_release(wlock_t lock);
+wstatus wlock_free(wlock_t *lock);
+wstatus wlock_acquire(wlock_t *lock);
+wstatus wlock_release(wlock_t *lock);
 
 #endif
 

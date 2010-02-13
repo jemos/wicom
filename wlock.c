@@ -119,7 +119,7 @@ wlock_acquire(wlock_t *lock)
 }
 
 wstatus
-wlock_release(wlock_t lock)
+wlock_release(wlock_t *lock)
 {
 	if( lock == 0 ) {
 		/* lock argument was not initialized. */
