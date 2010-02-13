@@ -21,12 +21,14 @@
 #ifndef _WTHREAD_H
 #define _WTHREAD_H
 
-#ifdef pthread_create
+#include "posh.h"
+
+#if (defined POSH_OS_OSX || defined POSH_OS_LINUX)
 #include <pthread.h>
 #define THREAD_API 1 /* Linux or MacOS pthread */
 #endif
 
-#ifdef WIN32
+#if (defined POSH_OS_WIN32 || defined POSH_OS_WIN64)
 #include <windows.h>
 #define THREAD_API 2 /* Windows */
 #endif
@@ -42,6 +44,8 @@ typedef pthread_t wthread_t;
 #elif THREAD_API == 2
 typedef HANDLE wthread_t;
 #endif
+
+typedef void (POSH_CDECL *wthread_routine_t)(void *param);
 
 wstatus wthread_create(wthread_routine_t routine,void *param,wthread_t *thread);
 wstatus wthread_wait(wthread_t thread);

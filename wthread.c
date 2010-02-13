@@ -18,6 +18,7 @@
 	Centro de Informatica do IST - Universidade Tecnica de Lisboa 
 */
 
+#include "wstatus.h"
 #include "wthread.h"
 
 wstatus
@@ -106,7 +107,8 @@ wstatus
 wthread_exit(void)
 {
 #if THREAD_API == 1
-	return pthread_exit(0);
+	pthread_exit(0);
+	return WSTATUS_SUCCESS;
 #else
 	return WSTATUS_UNIMPLEMENTED;
 #endif
