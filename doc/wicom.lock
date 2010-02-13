@@ -1,0 +1,36 @@
+Basic synchronization object, a lock. Each lock should have a wlock_t type associated.
+Lock actions are simple: create, destroy, acquire and release.
+
+Example of usage:
+
+wlock_t lock;
+
+wstatus s = wlock_create(&lock);
+
+if( s != WSTATUS_SUCCESS ) {
+	...
+}
+
+s = wlock_acquire(&lock);
+
+if( s != WSTATUS_SUCCESS ) {
+	...
+}
+
+/* now the lock is acquired, one can use the shared resource */
+
+/* release the resource for other threads */
+
+s = wlock_release(&lock);
+if( s != WSTATUS_SUCCESS ) {
+	...
+}
+
+/* free the lock whenever its not needed... */
+
+s = wlock_free(&lock);
+if( s != WSTATUS_SUCCESS ) {
+	...
+}
+
+

@@ -1,0 +1,17 @@
+wicom threads are implemented through wthread module. This module
+abstracts OS different implementation of threads.
+
+Basic functions are:
+
+typedef THREADHANDLE wthread_t;
+typedef void (*wthread_routine_t)(void *param);
+
+wstatus wthread_create(wthread_routine_t routine,void *param,wthread_t *thread);
+wstatus wthread_wait(wthread_t thread);
+
+So wthread_create creates a thread using only 3 arguments, the routine
+address, the routine parameter to pass when called and one variable where
+to save the new thread identifier.
+
+The third argument can be null, means the caller will not use the thread
+identifier.
