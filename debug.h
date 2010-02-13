@@ -30,7 +30,9 @@ typedef enum _debug_mod_t {
 	MOD_MAPMGR = 8,
 	MOD_APMGR = 16,
 	MOD_SCANMGR = 32,
-	MOD_DEBUG = 64
+	MOD_DEBUG = 64,
+	MOD_WTHREAD = 128,
+	MOD_WLOCK = 256
 } debug_mod_t;
 /* maximum modules for debug... 32 */
 
