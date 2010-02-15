@@ -41,5 +41,32 @@
 #ifndef _WVIEW_H
 #define _WVIEW_H
 
+#include "posh.h"
+#include "shape.h"
+#include "wviewcb.h"
+
+/* wview structures should be the same between the different
+   implementations (glut, freeglut, Windows GUI, MacOS) */
+
+typedef struct _wview_init_t
+{
+	int junk;
+} wview_init_t;
+
+typedef struct _wview_window_t
+{
+	unsigned int width,height;
+	wvdraw_cb draw_routine;
+	wvkeyboard_cb keyboard_routine;
+	wvmouse_cb mouse_routine;
+} wview_window_t;
+
+wstatus wview_load(wview_init_t init);
+wstatus wview_unload(void);
+wstatus wview_create_window(wview_window_t window);
+wstatus wview_destroy_window(void);
+wstatus wview_draw_shape(shape_t shape);
+wstatus wview_redraw(void);
+
 #endif
 
