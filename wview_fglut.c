@@ -79,7 +79,7 @@ void wview_display_func(void);
    because they are not supported in this implementation.
 */
 wstatus
-wview_load(wview_init_t init)
+wview_load(wview_load_t load)
 {
 	dbgprint(MOD_WVIEW,__func__,"called");
 

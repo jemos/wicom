@@ -48,10 +48,10 @@
 /* wview structures should be the same between the different
    implementations (glut, freeglut, Windows GUI, MacOS) */
 
-typedef struct _wview_init_t
+typedef struct _wview_load_t
 {
 	int junk;
-} wview_init_t;
+} wview_load_t;
 
 typedef struct _wview_window_t
 {
@@ -61,7 +61,7 @@ typedef struct _wview_window_t
 	wvmouse_cb mouse_routine;
 } wview_window_t;
 
-wstatus wview_load(wview_init_t init);
+wstatus wview_load(wview_load_t load);
 wstatus wview_unload(void);
 wstatus wview_create_window(wview_window_t window);
 wstatus wview_destroy_window(void);
