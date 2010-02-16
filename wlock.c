@@ -162,6 +162,7 @@ wlock_release(wlock_t *lock)
 	dbgprint(MOD_WLOCK,__func__,"called with lock=%p",(void*)lock);
 	if( lock == 0 ) {
 		/* lock argument was not initialized. */
+		dbgprint(MOD_WLOCK,__func__,"Invalid wlock_t pointer specified (lock=0)");
 		return WSTATUS_INVALID_ARGUMENT;
 	}
 
