@@ -25,19 +25,23 @@
 //#include "mapmgr.h"
 //#include "apmgr.h"
 //#include "console.h"
-#include "wopengl.h"
+#include "wstatus.h"
+#include "debug.h"
+#include "wview.h"
 
 int main(int argc,char *argv[])
 {
-	wgl_init_t wgli = { .argc = argc, .argv = argv };
+	wstatus s;
+	wview_load_t load;
 
-	wgl_initialize(&wgli);
+	/* load wview */
+	s = wview_load(load);
+	if( s != WSTATUS_SUCCESS )
+		return EXIT_SUCCESS;
 
-	wgl_create_window();
-	wgl_main_loop();
 
-	wgl_uninitialize();
-
+	/* unload wview */
+	s = wview_unload();
 	return EXIT_SUCCESS;
 }
 
