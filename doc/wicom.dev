@@ -1,0 +1,4 @@
+
+* Use lowcaps for structure and typenames
+* Use _t suffix for types
+* 

@@ -20,7 +20,9 @@ PLANT MANAGER
 	plant from the plant manager. 
 	
 	CHANGE VISIBILITY OPTIONS allowing one to change a plant to visible
-	invisble or blended.
+	invisble or blended. This action requires plant_visibility_t data
+	structure to be passed in data_ptr, it can have two values for now
+	PLANT_VISIBLE and PLANT_HIDDEN, self-explanatory.
 
 	CHANGE SCALE allows one to change the scaling vector of this plant,
 	that scale will be applied to the shapes associated with the plant.
@@ -29,4 +31,9 @@ PLANT MANAGER
 	a specific plant, that translation will also be applied to the
 	shapes associated to the plant.
 
+	GET/SET allows caller to get/set the full data structure of the plant,
+	when SET operation is used, plantid member of the structure will
+	be ignored, plantid argument is the one used to select the plant.
+
 	The wopengl module, first scales and then translates.
+

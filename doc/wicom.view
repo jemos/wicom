@@ -1,0 +1,91 @@
+
+Wicom wview is the abstraction of a viewport window structure.
+This includes functions to:
+- initialize a view window
+- create primitive objects (lines, points, circles, polygons)
+- create interactive objects (buttons, tooltips,...)
+- allow hooking for mouse and keyboard.
+
+This wview API should be as simple as possible, the complex
+objects or shapes should be created using code from above.
+
+The first and only wview available in the first version
+should be viewogl which relates to OpenGL implementation.
+
+Each wview available should have a standard list of functions
+that will be called by wview. At first sight it should not
+be needed to change wview at runtime and wicom should be
+compiled using only one of wview interfaces available (for
+instance, viewogl if its going to be compiled for Windows
+or Linux).
+
+The wview should be able to create one window where the
+output will be draw according to calls made to wview.
+
+Basic functions that should be implemented on each wview are:
+
+wview_initialize()
+wview_cleanup()
+
+wview_create_window()
+  Creates the window where the graphical output will be draw.
+  Only one window is used by wicom. In this function it should
+  be given also some callbacks for the propose of requesting
+  to draw a single frame or user interaction with mouse or
+  keyboard.
+
+  List of callbacks that must be provided:
+   - draw_frame_cb, called whenever a frame must be draw, it
+       is specified whenever its in ortho mode or perspective
+	   mode. The client code then should call 
+   - mouse_input_cb
+   - keyboard_input_cb
+
+  OpenGL: use glutCreateWindow, call 
+  WinGDI: CreateClassEx, CreateWindowEx ...
+
+wview_destroy_window()
+  Calling this function should destroy the view window
+  created using wview_create_window, since there's only one,
+  there's no need to identify the windows.
+
+wview_draw_shape()
+  The client should draw shapes whenever wview calls the
+  callback routine to draw a single frame (this routine is an
+  argument of wview_create_window).
+  No shape will be draw otherwise, that means this function will
+  return error if its called outside draw single frame context.
+
+  This function requires basic information about the shape,
+  which includes: type, vertexes locations, color?, etc.
+
+  All vertexes must use 3 dimentional coordinate system.
+
+  The view space should support two types of displaying the
+  graphics: orthogonal and perspective. Like in OpenGL the
+  orthogonal mode is for drawing 2D shapes, their size
+  doesn't change whenever you move around objects (eg. they
+  don't have perspective). In perspective mode, objects
+  have depth..
+
+  Whenever the interface calls the routine to draw a single
+  frame, information about the mode should be passed, or
+  better, two callback functions should be defined, one
+  for orthogonal draw and another for perspective draw.
+  Whenever a frame is to be draw, both of the callbacks are
+  called once.
+
+  OpenGL: glBegin, glEnd, glVertex, glColor,...
+  WinGDI: during the WM_PAINT, call GDI functions.
+
+wview_redraw()
+  Frames can be drawn because of two reasons, internal
+  to the wview and implicity from the client code. This
+  function allows the client code to inform wview that
+  it should redraw the viewport because something changed,
+  its a way of requesting a new frame to be draw.
+
+  For example, if client code has animation, it must call
+  this function for every new frame to be draw.
+
+

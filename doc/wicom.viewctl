@@ -1,0 +1,34 @@
+The creation of a new module wviewctl was motivated due to the
+inexistence of interface between the plantmgr, shapemgr and
+the wview in use.
+
+Shapes are added using the shapemgr, these shapes can be
+associated to plants and to layers. Plants are managed through
+the plantmgr and each plant has an unique ID. Layers cannot
+be dynamically added or removed, they belong to a static list.
+
+wview receives attention whenever a new frame must be draw
+then it needs the list of shapes or plants to draw, but these
+two data types must be processed and linked (if a map is
+not visible, its shapes shouldn't be drawn). This aditional
+processing motivated the creation of wviewctl.
+
+The user might also interact with the window of wview and
+thats when the input callbacks are called (for mouse and
+keyboard). So where should these callbacks be located in
+the code? the code that needs to process user input from
+the window is located in different parts of wicom, so I
+tought this wviewctl interface can also fix that by providing
+a way of multiplexing input callbacks between whoever
+registered in wviewctl for the input callback.
+
+So the client code can ask wviewctl to register input
+callbacks and whenever wviewctl is called due to user input
+it will call all registered callbacks of the client code.
+
+wview should not know anything about shapes, layers or
+plants, it just draws primitives (lines, polygons, ...).
+Although, in the beginning shapes from the shapemgr should
+be very similar to the primitive shapes provided by wview
+in the future wview might have custom shapes made of various
+wview shapes (eg. label = text + background rectangle).

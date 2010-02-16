@@ -1,0 +1,37 @@
+There are two types of information that wicom must keep track of,
+which are the wicom configuration and the wicom data.
+
+The configuration is related to wicom way of working, behaviour,
+visual aspects etc. 
+
+Configuration of wicom is stored in a custom configuration format
+saved in a file with a default location depending on the OS.
+
+In Linux it should be:
+
+/etc/wicom/wicom.conf
+
+As wicom requires supervisor privileges to do wireless scans.
+
+Data information is related to user-added data during the usage
+of the program, it includes maps, access point informations,
+samples, custom data and informations, etc.
+
+Data of wicom is saved in a directory tree which root depends
+on OS but for Linux should be:
+
+/etc/wicom/data/...
+
+Saving data this way eases the way of changing and or updating
+it by external programs/scripts. For example one might have
+a cron script that obtains the access point list of a specific
+map periodically and updates this access points informations
+in wicom data directory automatically.
+
+Monitoring data directory should not be automatic, so the user
+must use a reload data command in wicom console to do so (while
+wicom is running of course).
+
+Also adding this monitoring feature to wicom will require some
+abstraction due to differences on OS API's for monitoring folders.
+
