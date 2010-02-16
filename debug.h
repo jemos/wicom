@@ -32,7 +32,8 @@ typedef enum _debug_mod_t {
 	MOD_SCANMGR = 32,
 	MOD_DEBUG = 64,
 	MOD_WTHREAD = 128,
-	MOD_WLOCK = 256
+	MOD_WLOCK = 256,
+	MOD_WVIEW = 512
 } debug_mod_t;
 /* maximum modules for debug... 32 */
 
