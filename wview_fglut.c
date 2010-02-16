@@ -26,6 +26,7 @@
 
 #include "posh.h"
 
+#include <GL/freeglut.h>
 #include <stdbool.h>
 
 #include "wstatus.h"
@@ -60,11 +61,15 @@ static double win_depth = 100.0;
 /* wview_load funcion called? */
 static bool wview_loaded = false;
 
+/* flag that is set whenever the client can draw shapes */
+static bool accept_shapes = false;
+
 /* some local functions declarations */
-void mouse_func(int, int, int, int);
-void keyboard_func(unsigned char, int, int);
-void reshape_func(int, int);
+void wview_mouse_func(int button, int state, int x, int y);
+void wview_keyboard_func(unsigned char key, int x, int y);
+void wview_reshape_func(int width,int height);
 void close_func(void);
+void wview_display_func(void);
 
 /*
    wview_load
@@ -148,7 +153,7 @@ wview_create_window(wview_window_t window)
 		return WSTATUS_INVALID_ARGUMENT;
 	}
 	cltdraw_cb = window.draw_routine;
-	dbgprint(MOD_WVIEW,__func__,"Set client draw routine pointer to %p",(void*)window.draw_routine);
+	dbgprint(MOD_WVIEW,__func__,"Set client draw routine pointer to %p",window.draw_routine);
 
 	if( !window.keyboard_routine ) {
 		dbgprint(MOD_WVIEW,__func__,"Invalid keyboard routine pointer specified in window structure");
@@ -156,7 +161,7 @@ wview_create_window(wview_window_t window)
 		return WSTATUS_INVALID_ARGUMENT;
 	}
 	cltkeyboard_cb = window.keyboard_routine;
-	dbgprint(MOD_WVIEW,__func__,"Set client keyboard routine pointer to %p",(void*)window.keyboard_routine);
+	dbgprint(MOD_WVIEW,__func__,"Set client keyboard routine pointer to %p",window.keyboard_routine);
 
 	if( !window.mouse_routine ) {
 		dbgprint(MOD_WVIEW,__func__,"Invalid mouse routine pointer specified in window structure");
@@ -164,7 +169,7 @@ wview_create_window(wview_window_t window)
 		return WSTATUS_INVALID_ARGUMENT;
 	}
 	cltmouse_cb = window.mouse_routine;
-	dbgprint(MOD_WVIEW,__func__,"Set client mouse routine pointer to %p",(void*)window.mouse_routine);
+	dbgprint(MOD_WVIEW,__func__,"Set client mouse routine pointer to %p",window.mouse_routine);
 
 	window_id = glutCreateWindow("wicom");
 
@@ -215,8 +220,8 @@ void wview_display_func(void)
 
 	if(!cltdraw_cb) {
 		dbgprint(MOD_WVIEW,__func__,"cltdraw_cb is invalid (are you using multithreading?)!");
-		dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
-		return WSTATUS_FAILURE;
+		dbgprint(MOD_WVIEW,__func__,"Finished.");
+		return; 
 	}
 
 	/* setup OpenGL for a new draw */
@@ -227,11 +232,14 @@ void wview_display_func(void)
 	/* start with perspective mode */
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	gluPerspective(45.0f,(GLfloat)viewportWidth/(GLfloat)viewportHeight,0.1f,win_depth);
+	gluPerspective(45.0f,(GLfloat)win_width/(GLfloat)win_height,0.1f,win_depth);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 	draw.flags = WVDRAW_FLAG_PERSPECTIVE;
+
+	accept_shapes = true;
 	cltdraw_cb(draw);
+	accept_shapes = false;
 
 	/* then orthogonal mode */
 	glMatrixMode(GL_PROJECTION);
@@ -240,7 +248,10 @@ void wview_display_func(void)
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 	draw.flags = WVDRAW_FLAG_ORTHOGONAL;
+	
+	accept_shapes = true;
 	cltdraw_cb(draw);
+	accept_shapes = false;
 
 	/* swap buffers in GL */
 	glutSwapBuffers();
@@ -301,10 +312,10 @@ void wview_mouse_func(int button,int state,int x,int y)
 
 	dbgprint(MOD_WVIEW,__func__,"called");
 
-	if(!cltdraw_cb) {
-		dbgprint(MOD_WVIEW,__func__,"cltdraw_cb is invalid (are you using multithreading?)!");
-		dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
-		return WSTATUS_FAILURE;
+	if(!cltmouse_cb) {
+		dbgprint(MOD_WVIEW,__func__,"cltmouse_cb is invalid (are you using multithreading?)!");
+		dbgprint(MOD_WVIEW,__func__,"Finished.");
+		return;
 	}
 
 	mouse.x = (unsigned int)x;
@@ -326,8 +337,8 @@ void wview_mouse_func(int button,int state,int x,int y)
 			break;
 		default:
 			dbgprint(MOD_WVIEW,__func__,"Unable to process mouse button identifier (button=%d)",button);
-			dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
-			return WSTATUS_FAILURE;
+			dbgprint(MOD_WVIEW,__func__,"Finished.");
+			return;
 	}
 
 	switch(state)
@@ -342,9 +353,10 @@ void wview_mouse_func(int button,int state,int x,int y)
 			break;
 		default:
 			dbgprint(MOD_WVIEW,__func__,"Unable to process mouse state identifier (state=%d)",state);
-			dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
-			return WSTATUS_FAILURE;
+			dbgprint(MOD_WVIEW,__func__,"Finished.");
+			return;
 	}
+
 	dbgprint(MOD_WVIEW,__func__,"Calling client mouse routine");
 	cltmouse_cb(mouse);
 	dbgprint(MOD_WVIEW,__func__,"Returned from the client mouse routine");
@@ -353,25 +365,168 @@ void wview_mouse_func(int button,int state,int x,int y)
 	return;
 }
 
+/*
+   wview_keyboard_func
+
+   Callback for glut keyboard function.
+   "When a user types into the window, each key press generating an ASCII character will generate
+   a keyboard callback. The key callback parameter is the generated ASCII character. The state of
+   modifier keys such as Shift cannot be determined directly; their only effect will be on the 
+   returned ASCII data. The x and y callback parameters indicate the mouse location in window 
+   relative coordinates when the key was pressed." -- GLUT Reference.
+
+   Since this function is called when the user presses the key, wview must simulate the key down
+   and key up which will equal to a key press with the difference that there is no delay between.
+*/
 void wview_keyboard_func(unsigned char key,int x,int y)
 {
+	wvkey_t key_event;
+	dbgprint(MOD_WVIEW,__func__,"called with key=0x%02X, x=%d, y=%d",(unsigned int)key,x,y);
+
+	if(!cltkeyboard_cb) {
+		dbgprint(MOD_WVIEW,__func__,"cltkeyboard_cb is invalid (are you using multithreading?)!");
+		dbgprint(MOD_WVIEW,__func__,"Finished.");
+		return;
+	}
+
+	dbgprint(MOD_WVIEW,__func__,"filling wvkey_t structure");
+	key_event.key = key;
+	key_event.x = x;
+	key_event.y = y;
+	key_event.flags = 0;
+
+	/* call the client callback for the WV_KEY_DOWN */
+	dbgprint(MOD_WVIEW,__func__,"Calling client keyboard routine with mode=WV_KEY_DOWN");
+	cltkeyboard_cb(key_event,WV_KEY_DOWN);
+	dbgprint(MOD_WVIEW,__func__,"Client routine returned");
+
+	dbgprint(MOD_WVIEW,__func__,"filling wvkey_t structure");
+	key_event.key = key;
+	key_event.x = x;
+	key_event.y = y;
+	key_event.flags = 0;
+
+	/* call the client callback for the WV_KEY_UP */
+	dbgprint(MOD_WVIEW,__func__,"Calling client keyboard routine with mode=WV_KEY_UP");
+	cltkeyboard_cb(key_event,WV_KEY_UP);
+	dbgprint(MOD_WVIEW,__func__,"Client routine returned");
+
+	dbgprint(MOD_WVIEW,__func__,"Finished.");
 }
 
 wstatus
 wview_destroy_window(void)
 {
-	return WSTATUS_UNIMPLEMENTED;
+	dbgprint(MOD_WVIEW,__func__,"called");
+
+	if( !wview_loaded ) {
+		dbgprint(MOD_WVIEW,__func__,"Cannot destroy window when wview was not loaded yet");
+		dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	if( !window_id ) {
+		dbgprint(MOD_WVIEW,__func__,"Cannot destroy window because no window was created yet");
+		dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	/* call glut to destroy window */
+	dbgprint(MOD_WVIEW,__func__,"Calling glutDestroyWindow with window_id=%d",window_id);
+	glutDestroyWindow(window_id);
+
+	/* check if window was destroyed successfully */
+	if( glutGetWindow() != 0 )
+	{
+		/* maybe the code is creating more than one window so the current is not returning 0 */
+		dbgprint(MOD_WVIEW,__func__,"Unable to destroy window (are you creating more than one window?)");
+		dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	dbgprint(MOD_WVIEW,__func__,"Window destroyed successfully");
+
+	/* clear window_id */
+	window_id = 0;
+
+	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
+	return WSTATUS_SUCCESS;
 }
 
-wstatus
-wview_draw_shape(shape_t shape)
-{
-	return WSTATUS_UNIMPLEMENTED;
-}
+/*
+   wview_redraw
 
+   Client code can ask wview to make a new frame, this will make wview call a GLUT function to
+   trigger a new draw and that will make GLUT call wview displayFunc callback. That callback
+   will then call a client routine that does the actual drawning using wview_draw_shape.
+*/
 wstatus
 wview_redraw(void)
 {
-	return WSTATUS_UNIMPLEMENTED;
+	dbgprint(MOD_WVIEW,__func__,"called");
+
+	if( !wview_loaded ) {
+		dbgprint(MOD_WVIEW,__func__,"Cannot use this function when wview was not loaded yet");
+		dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	if( !window_id ) {
+		dbgprint(MOD_WVIEW,__func__,"Cannot use this function when no window was created yet");
+		dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	dbgprint(MOD_WVIEW,__func__,"Calling glutPostRedisplay function");
+	glutPostRedisplay();
+	dbgprint(MOD_WVIEW,__func__,"glutPostRedisplay returned");
+
+	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
+	return WSTATUS_SUCCESS;
+}
+
+void draw_point(shape_t shape)
+{
+	return;
+}
+
+/*
+   wview_draw_shape
+
+   This should be the most complex function in wview, draw the shape in shape_t structure
+   using OpenGL API. The supported shape types are point, line, polyline, polygon and text.
+*/
+wstatus
+wview_draw_shape(shape_t shape)
+{
+	dbgprint(MOD_WVIEW,__func__,"called with shape.type=%d",shape.type);
+
+	if( !accept_shapes ) {
+		dbgprint(MOD_WVIEW,__func__,"Cannot use this function outside client redraw callback");
+		dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
+		return WSTATUS_FAILURE;
+	}
+
+	switch(shape.type)
+	{
+		case SHAPE_POINT:
+			draw_point(shape);
+			break;
+		case SHAPE_LINE:
+			break;
+		case SHAPE_POLYLINE:
+			break;
+		case SHAPE_POLYGON:
+			break;
+		case SHAPE_TEXT:
+			break;
+		default:
+			dbgprint(MOD_WVIEW,__func__,"Invalid or unsupported shape type (%d)",shape.type);
+			dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
+			return WSTATUS_FAILURE;
+	}
+
+	/* shouldn't get here, in any case...return failure. */
+	return WSTATUS_FAILURE;
 }
 

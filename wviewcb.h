@@ -9,6 +9,7 @@ typedef union _wvkey_t
 {
 	unsigned int key;
 	unsigned int flags;
+	signed int x,y;
 } wvkey_t;
 
 typedef enum _wvkey_mode_t
