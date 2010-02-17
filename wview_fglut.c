@@ -485,9 +485,119 @@ wview_redraw(void)
 	return WSTATUS_SUCCESS;
 }
 
-void draw_point(shape_t shape)
+/*
+   draw_point
+
+   Helper function of wview_draw_shape to draw a single point.
+   TODO Point size is ignored for now.
+*/
+wstatus
+draw_point(shape_t shape)
 {
-	return;
+	dbgprint(MOD_WVIEW,__func__,"called");
+
+	/* set point color */
+	glColor3d(shape.data.point.color.x,
+			shape.data.point.color.y,
+			shape.data.point.color.z );
+
+	dbgprint(MOD_WVIEW,__func__,"point color is (%0.2g,%0.2g,%0.2g) location is (%0.2g,%0.2g,%0.2g)",
+			shape.data.point.color.x,
+			shape.data.point.color.y,
+			shape.data.point.color.z,
+			shape.data.point.p1.x,
+			shape.data.point.p1.y,
+			shape.data.point.p1.z );
+
+	/* draw the point */
+	glBegin(GL_POINTS);
+	glVertex3d(shape.data.point.p1.x,shape.data.point.p1.y,shape.data.point.p1.z);
+	glEnd();
+
+	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
+	return WSTATUS_SUCCESS;
+}
+
+/*
+   draw_line
+
+   Helper function of wview_draw_shape to draw a single line.
+*/
+wstatus
+draw_line(shape_t shape)
+{
+	dbgprint(MOD_WVIEW,__func__,"called");
+
+	/* set line color */
+	glColor3d(shape.data.line.color.x,
+			shape.data.line.color.y,
+			shape.data.line.color.z);
+
+	dbgprint(MOD_WVIEW,__func__,"line color is (%0.2g,%0.2g,%0.2g) vertexes are (%0.2g,%0.2g,%0.2g) to (%0.2g,%0.2g,%0.2g)",
+			shape.data.line.color.x,shape.data.line.color.y,shape.data.line.color.z,
+			shape.data.line.p1.x,shape.data.line.p1.y,shape.data.line.p1.z,
+			shape.data.line.p2.x,shape.data.line.p2.y,shape.data.line.p2.z );
+
+	/* draw the line */
+	glBegin(GL_LINES);
+	glVertex3d(shape.data.line.p1.x,shape.data.line.p1.y,shape.data.line.p1.z);
+	glVertex3d(shape.data.line.p2.x,shape.data.line.p2.y,shape.data.line.p2.z);
+	glEnd();
+
+	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
+	return WSTATUS_SUCCESS;
+}
+
+/*
+   draw_polyline
+
+   Helper function of wview_draw_shape to draw a polyline.
+   The polyline vertexes are passed in a vector (point_list).
+   Make sure that point_count is set OK.
+*/
+wstatus
+draw_polyline(shape_t shape)
+{
+	dbgprint(MOD_WVIEW,__func__,"called");
+
+	/* set the line color */
+	glColor3d(shape.data.polyline.color.x,
+			shape.data.polyline.color.y,
+			shape.data.polyline.color.z);
+
+	dbgprint(MOD_WVIEW,__func__,"line color is (%0.2g,%0.2g,%0.2g)");
+
+	dbgprint(MOD_WVIEW,__func__,"inserting %u vertexes",shape.data.polyline.point_count);
+
+	/* draw the polyline */
+	glBegin(GL_LINE_STRIP);
+	for( unsigned int i = 0 ; i < shape.data.polyline.point_count ; i++ )
+	{
+		dbgprint(MOD_WVIEW,__func__,"vertex #%u is at (%0.2g,%0.2g,%0.2g)",i,
+				shape.data.polyline.point_list[i].x,
+				shape.data.polyline.point_list[i].y,
+				shape.data.polyline.point_list[i].z );
+
+		glVertex3d(shape.data.polyline.point_list[i].x,
+				shape.data.polyline.point_list[i].y,
+				shape.data.polyline.point_list[i].z);
+	}
+	glEnd();
+
+	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
+	return WSTATUS_SUCCESS;
+}
+
+wstatus
+draw_polygon(shape_t shape)
+{
+	return WSTATUS_SUCCESS;
+}
+
+wstatus
+draw_text(shape_t shape)
+{
+	return WSTATUS_SUCCESS;
 }
 
 /*
@@ -510,16 +620,15 @@ wview_draw_shape(shape_t shape)
 	switch(shape.type)
 	{
 		case SHAPE_POINT:
-			draw_point(shape);
-			break;
+			return draw_point(shape);
 		case SHAPE_LINE:
-			break;
+			return draw_line(shape);
 		case SHAPE_POLYLINE:
-			break;
+			return draw_polyline(shape);
 		case SHAPE_POLYGON:
-			break;
+			return draw_polygon(shape);
 		case SHAPE_TEXT:
-			break;
+			return draw_text(shape);
 		default:
 			dbgprint(MOD_WVIEW,__func__,"Invalid or unsupported shape type (%d)",shape.type);
 			dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
