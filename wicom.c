@@ -34,17 +34,80 @@
 wstatus
 draw_routine(wvdraw_t draw)
 {
+	shape_t s;
+	memset(&s,0,sizeof(s));
+
 	if( draw.flags & WVDRAW_FLAG_ORTHOGONAL )
 	{
-		shape_t s;
-		memset(&s,0,sizeof(s));
+		v3d_t plist[] = {
+			{-50,50,0},
+			{50,50,0},
+			{50,-50,0},
+			{-50,-50,0}
+		};
+
+		s.type = SHAPE_POLYGON;
+		V3_SET(s.data.polygon.color,1.0,0,0)
+		s.data.polygon.point_list = plist;
+		s.data.polygon.point_count = 4;
+		wview_draw_shape(s);
+
 		s.type = SHAPE_LINE;
 		s.data.line.color.x = 1.0; s.data.line.color.y = 1.0; s.data.line.color.z = 1.0;
-		s.data.line.p1.x = -10.0; s.data.line.p1.y = 0; s.data.line.p1.z = 0;
-		s.data.line.p2.x = +10.0; s.data.line.p2.y = 0; s.data.line.p2.z = 0;
+		s.data.line.p1.x = -5.0+800.0/2; s.data.line.p1.y = 600/2; s.data.line.p1.z = 0;
+		s.data.line.p2.x = +5.0+800.0/2; s.data.line.p2.y = 600/2; s.data.line.p2.z = 0;
+		wview_draw_shape(s);
+
+		s.type = SHAPE_LINE;
+		s.data.line.color.x = 1.0; s.data.line.color.y = 1.0; s.data.line.color.z = 1.0;
+		s.data.line.p1.x = 800/2; s.data.line.p1.y = -5.0+600.0/2.0; s.data.line.p1.z = 0;
+		s.data.line.p2.x = 800/2; s.data.line.p2.y = +5.0+600.0/2.0; s.data.line.p2.z = 0;
+		wview_draw_shape(s);
+
+		s.type = SHAPE_POINT;
+		V3_SET(s.data.point.p1,0,0,0);
+		V3_SET(s.data.point.color,1,0,0);
+		wview_draw_shape(s);
+
+		s.type = SHAPE_TEXT;
+		s.data.text.content = "XPTO IN ORTHO!";
+		s.data.text.position.x = 50.0;
+		s.data.text.position.y = 50.0;
+		s.data.text.position.z = 0;
+		s.data.text.font = TEXT_FONT_SMALL;
+		V3_SET(s.data.text.color,0,1,0);
 		wview_draw_shape(s);
 	} else if( draw.flags & WVDRAW_FLAG_PERSPECTIVE )
 	{
+		s.type = SHAPE_LINE;
+		s.data.line.color.x = 1.0; s.data.line.color.y = 1.0; s.data.line.color.z = 1.0;
+		s.data.line.p1.x = -5.0; s.data.line.p1.y = 0; s.data.line.p1.z = 0;
+		s.data.line.p2.x = +5.0; s.data.line.p2.y = 0; s.data.line.p2.z = 0;
+		wview_draw_shape(s);
+
+		s.type = SHAPE_LINE;
+		s.data.line.color.x = 1.0; s.data.line.color.y = 1.0; s.data.line.color.z = 1.0;
+		s.data.line.p1.x = 0; s.data.line.p1.y = -5.0; s.data.line.p1.z = 0;
+		s.data.line.p2.x = 0; s.data.line.p2.y = +5.0; s.data.line.p2.z = 0;
+		wview_draw_shape(s);
+
+		s.type = SHAPE_TEXT;
+		s.data.text.content = "XPTO SMALL";
+		s.data.text.position.x = 50.0;
+		s.data.text.position.y = 50.0;
+		s.data.text.position.z = 0;
+		s.data.text.font = TEXT_FONT_SMALL;
+		V3_SET(s.data.text.color,0,1,0);
+		wview_draw_shape(s);
+
+		s.type = SHAPE_TEXT;
+		s.data.text.content = "XPTO-Z=20";
+		s.data.text.position.x = 50.0;
+		s.data.text.position.y = 50.0;
+		s.data.text.position.z = 20.0;
+		s.data.text.font = TEXT_FONT_SMALL;
+		V3_SET(s.data.text.color,0,0.5,1);
+		wview_draw_shape(s);
 	}
 
 	return WSTATUS_SUCCESS;
@@ -81,6 +144,17 @@ int main(int argc,char *argv[])
 	window.keyboard_routine = keyboard_routine;
 	window.mouse_routine = mouse_routine;
 	wview_create_window(window);
+
+	v3d_t v;
+	V3_SET(v,10,0,-800.0);
+	wview_set(WVOPTION_TRANSLATE_VECTOR,&v,sizeof(v));
+
+	v4d_t v4;
+	V4_SET(v4,0,0,1.0,45.0);
+	wview_set(WVOPTION_ROTATE_VECTOR,&v4,sizeof(v4));
+
+	int rt_order = WVIEW_TRANSLATE_ROTATE;
+	wview_set(WVOPTION_TR_ORDER,&rt_order,sizeof(rt_order));
 
 	/* enter draw loop */
 	wview_process(WVIEW_SYNCHRONOUS);

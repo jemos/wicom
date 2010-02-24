@@ -67,14 +67,25 @@ typedef enum _wview_mode_t
 	WVIEW_ASYNCHRONOUS
 } wview_mode_t;
 
+typedef enum _wview_option_t
+{
+	WVOPTION_TRANSLATE_VECTOR,
+	WVOPTION_ROTATE_VECTOR,
+	WVOPTION_TR_ORDER
+} wview_option_t;
+
+#define WVIEW_ROTATE_TRANSLATE 1
+#define WVIEW_TRANSLATE_ROTATE 2
+
 wstatus wview_load(wview_load_t load);
 wstatus wview_unload(void);
 wstatus wview_create_window(wview_window_t window);
 wstatus wview_destroy_window(void);
 wstatus wview_draw_shape(shape_t shape);
 wstatus wview_redraw(void);
-
 wstatus wview_process(wview_mode_t mode);
+wstatus wview_set(wview_option_t option,void *value_ptr,unsigned int value_size);
+wstatus wview_get(wview_option_t option,void *value_ptr,unsigned int *value_size);
 
 #endif
 

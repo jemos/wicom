@@ -56,7 +56,7 @@ typedef enum _textfont_t {
 } textfont_t;
 
 typedef struct _shape_text_t {
-	signed char *content;
+	char *content;
 	v3d_t position;
 	v3d_t color;
 	textfont_t font;

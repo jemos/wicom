@@ -27,6 +27,7 @@
 
 #include <GL/freeglut.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "posh.h"
 #include "wstatus.h"
@@ -56,13 +57,18 @@ static int window_id = 0;
 /* current window size variables */
 static int win_width = 0;
 static int win_height = 0;
-static double win_depth = 100.0;
+static double win_depth = 1000.0;
 
 /* wview_load funcion called? */
 static bool wview_loaded = false;
 
 /* flag that is set whenever the client can draw shapes */
 static bool accept_shapes = false;
+
+/* local options */
+static v3d_t opt_translate_vector;
+static v4d_t opt_rotate_vector;
+static int opt_tr_order;
 
 /* some local functions declarations */
 void wview_mouse_func(int button, int state, int x, int y);
@@ -98,6 +104,11 @@ wview_load(wview_load_t load)
 
 	/* set some glut options */
 	glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE,GLUT_ACTION_GLUTMAINLOOP_RETURNS);
+
+	/* initialize options with default values */
+	V3_SET(opt_translate_vector,0,0,0);
+	V4_SET(opt_rotate_vector,0,0,0,0);
+	opt_tr_order = WVIEW_ROTATE_TRANSLATE;
 
 	/* change loaded flag to true */
 	wview_loaded = true;
@@ -198,11 +209,13 @@ wview_create_window(wview_window_t window)
 	/* initialize viewport */
 	dbgprint(MOD_WVIEW,__func__,"Initializing viewport...");
 
-	glClearColor(0.0, 0.0, 0.0, 0.0);
+	glClearColor(0.0, 0.0, 0.0, 0.5);
+	glShadeModel(GL_SMOOTH);
 	glClearDepth(1.0);
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LEQUAL);
-	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
+	glEnable(GL_COLOR_MATERIAL);
+	glHint(GL_PERSPECTIVE_CORRECTION_HINT,GL_NICEST);
 
 	/* initialize callbacks */
 	dbgprint(MOD_WVIEW,__func__,"Setting up window callbacks");
@@ -241,13 +254,40 @@ void wview_display_func(void)
 	gluPerspective(45.0f,(GLfloat)win_width/(GLfloat)win_height,0.1f,win_depth);
 	glMatrixMode(GL_MODELVIEW);
 
-	glLoadIdentity();
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glEnable(GL_DEPTH_TEST);
+	glLoadIdentity();
+	glDisable(GL_DEPTH_TEST);
+
+	if( opt_tr_order == WVIEW_TRANSLATE_ROTATE ) {
+
+		/* apply translate vector first */
+		glTranslated(opt_translate_vector.x,
+				opt_translate_vector.y,
+				opt_translate_vector.z);
+
+		/* apply rotate vector second */
+		glRotated(opt_rotate_vector.t,
+				opt_rotate_vector.x,
+				opt_rotate_vector.y,
+				opt_rotate_vector.z);
+	} else
+	{
+		/* otherwise and default is to rotate first */
+
+		/* apply rotate vector second */
+		glRotated(opt_rotate_vector.t,
+				opt_rotate_vector.x,
+				opt_rotate_vector.y,
+				opt_rotate_vector.z);
+
+		/* apply translate vector first */
+		glTranslated(opt_translate_vector.x,
+				opt_translate_vector.y,
+				opt_translate_vector.z);
+	}
+
+
 	draw.flags = WVDRAW_FLAG_PERSPECTIVE;
-
-	glTranslated(0,0,-10.0);
-
 	accept_shapes = true;
 	cltdraw_cb(draw);
 	accept_shapes = false;
@@ -259,10 +299,8 @@ void wview_display_func(void)
 	glOrtho(0.0f,win_width,win_height,0.0f,-1.0f,1.0f);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glDisable(GL_DEPTH_TEST);
+
 	draw.flags = WVDRAW_FLAG_ORTHOGONAL;
-	
 	accept_shapes = true;
 	cltdraw_cb(draw);
 	accept_shapes = false;
@@ -644,7 +682,43 @@ draw_polygon(shape_t shape)
 wstatus
 draw_text(shape_t shape)
 {
-	return WSTATUS_SUCCESS;
+	dbgprint(MOD_WVIEW,__func__,"Called");
+
+	if( !strlen(shape.data.text.content) ) {
+		dbgprint(MOD_WVIEW,__func__,"Cannot draw empty line of text (strlen(content) = 0)");
+		DBGRET_FAILURE(MOD_WVIEW)
+	}
+
+	glColor3d(shape.data.text.color.x,
+			shape.data.text.color.y,
+			shape.data.text.color.z);
+
+	glRasterPos3d(shape.data.text.position.x,
+			shape.data.text.position.y,
+			shape.data.text.position.z);
+
+	void *font;
+	switch(shape.data.text.font)
+	{
+		case TEXT_FONT_SMALL:
+			dbgprint(MOD_WVIEW,__func__,"Using small font size for the text");
+			font = GLUT_BITMAP_8_BY_13;
+			break;
+		case TEXT_FONT_NORMAL:
+			dbgprint(MOD_WVIEW,__func__,"Using normal font size for the text");
+			font = GLUT_BITMAP_HELVETICA_10;
+			break;
+		default:
+			dbgprint(MOD_WVIEW,__func__,"Invalid or unsupported font (%d)",shape.data.text.font);
+			DBGRET_FAILURE(MOD_WVIEW)
+	}
+
+	dbgprint(MOD_WVIEW,__func__,"Printing text using GLUT, content is: %s",shape.data.text.content);
+
+	for( unsigned int i = 0 ; i < strlen(shape.data.text.content) ; i++ )
+		glutBitmapCharacter(font,shape.data.text.content[i]);
+
+	DBGRET_SUCCESS(MOD_WVIEW)
 }
 
 /*
@@ -713,5 +787,105 @@ wview_process(wview_mode_t mode)
 	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
 
 	return WSTATUS_SUCCESS;
+}
+
+wstatus
+wview_set(wview_option_t option,void *value_ptr,unsigned int value_size)
+{
+	dbgprint(MOD_WVIEW,__func__,"Called with option=%d value_ptr=%p value_size=%u",option,value_ptr,value_size);
+
+	switch(option)
+	{
+		case WVOPTION_TRANSLATE_VECTOR:
+			
+			/* value_size is expected to be sizeof(v3d) */
+			if( value_size != sizeof(v3d_t) ) {
+				dbgprint(MOD_WVIEW,__func__,"value_size is not the expected (requires %u and passed was %d)",
+						sizeof(v3d_t),value_size);
+				DBGRET_FAILURE(MOD_WVIEW)
+			}
+
+			/* validate value_ptr, we don't wanna read from void */
+			if( !value_ptr ) {
+				dbgprint(MOD_WVIEW,__func__,"value_ptr is invalid (value_ptr=0)");
+				DBGRET_FAILURE(MOD_WVIEW)
+			}
+
+			/* set translation vector */
+			v3d_t *new_v3 = (v3d_t*)value_ptr;
+			dbgprint(MOD_WVIEW,__func__,"Setting translation vector from " V3DPRINTF " to " V3DPRINTF,
+					opt_translate_vector.x,opt_translate_vector.y,opt_translate_vector.z,
+					new_v3->x, new_v3->y, new_v3->z);
+			V3_SET(opt_translate_vector,new_v3->x,new_v3->y,new_v3->z)
+
+			dbgprint(MOD_WVIEW,__func__,"New translate vector is " V3DPRINTF,
+					opt_translate_vector.x,opt_translate_vector.y,opt_translate_vector.z );
+			break;
+
+		case WVOPTION_ROTATE_VECTOR:
+
+			/* value_size is expected to be sizeof(v4d) */
+			if( value_size != sizeof(v4d_t) ) {
+				dbgprint(MOD_WVIEW,__func__,"value_size is not the expected (requires %u and passed was %d)",
+						sizeof(v4d_t),value_size);
+				DBGRET_FAILURE(MOD_WVIEW)
+			}
+
+			/* validate value_ptr, we don't wanna read from void */
+			if( !value_ptr ) {
+				dbgprint(MOD_WVIEW,__func__,"value_ptr is invalid (value_ptr=0)");
+				DBGRET_FAILURE(MOD_WVIEW)
+			}
+
+			/* set rotation vector */
+			v4d_t *new_v4 = (v4d_t*)value_ptr;
+			dbgprint(MOD_WVIEW,__func__,"Setting rotation vector from " V4DPRINTF " to " V4DPRINTF,
+					opt_rotate_vector.x,opt_rotate_vector.y,opt_rotate_vector.z,opt_rotate_vector.t,
+					new_v4->x, new_v4->y, new_v4->z, new_v4->t);
+			V4_SET(opt_rotate_vector,new_v4->x,new_v4->y,new_v4->z,new_v4->t)
+			break;
+		
+		case WVOPTION_TR_ORDER:
+		
+			/* value_size is expected to be sizeof(bool) */	
+			if( value_size != sizeof(int) ) {
+				dbgprint(MOD_WVIEW,__func__,"value_size is not the expected (requires %u and passed was %d)",
+						sizeof(int),value_size);
+				DBGRET_FAILURE(MOD_WVIEW)
+			}
+
+			/* validate value_ptr, we don't wanna read from void */
+			if( !value_ptr ) {
+				dbgprint(MOD_WVIEW,__func__,"value_ptr is invalid (value_ptr=0)");
+				DBGRET_FAILURE(MOD_WVIEW)
+			}
+
+			/* set translate/rotate order */
+			int *new_tr = (int*)value_ptr;
+
+			/* test the possible values */
+			switch(*new_tr)
+			{
+				case WVIEW_TRANSLATE_ROTATE:
+					dbgprint(MOD_WVIEW,__func__,"Order detected as translate first then rotate");
+					break;
+				case WVIEW_ROTATE_TRANSLATE:
+					dbgprint(MOD_WVIEW,__func__,"Order detected as rotate first then translate");
+					break;
+				default:
+					dbgprint(MOD_WVIEW,__func__,"Invalid or unsupported value (%d)",*new_tr);
+					DBGRET_FAILURE(MOD_WVIEW)
+			}
+
+			dbgprint(MOD_WVIEW,__func__,"Setting translate/rotate order from %d to %d",opt_tr_order,*new_tr);
+			opt_tr_order = *new_tr;	
+			break;
+
+		default:
+			dbgprint(MOD_WVIEW,__func__,"Invalid or unsupported option (%d)",option);
+			DBGRET_FAILURE(MOD_WVIEW);
+	}
+
+	DBGRET_SUCCESS(MOD_WVIEW)
 }
 
