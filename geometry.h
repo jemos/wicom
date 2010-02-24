@@ -50,10 +50,13 @@ typedef struct _v4u_t {
 } v4u_t;
 
 /* these macros are type independent and are simply helpers */
-#define V1_SET(v,x) v=x;
-#define V2_SET(v,x,y,z) v.x=x; v.y=y;
-#define V3_SET(v,x,y,z) v.x=x; v.y=y; v.z=z;
-#define V4_SET(v,x,y,z,t) v.x=x; v.y=y; v.z=z; v.t = t;
+#define V1_SET(v,x1) v=x1;
+#define V2_SET(v,x1,x2) v.x=x1; v.y=x2;
+#define V3_SET(v,x1,x2,x3) v.x=x1; v.y=x2; v.z=x3;
+#define V4_SET(v,x1,x2,x3,x4) v.x=x1; v.y=x2; v.z=x3; v.t=x4;
+
+#define V3DPRINTF "(%0.2g,%0.2g,%0.2g)"
+#define V4DPRINTF "(%0.2g,%0.2g,%0.2g,%0.2g)"
 
 #endif
 
