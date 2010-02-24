@@ -27,6 +27,11 @@ and asynchronous. This should be implemented using the function
 wview_process function which should have one argument to
 distinguish from those two modes.
 
+It is also necessary for the wview to provide client ways
+of moving the camera around the world. The way it should do this
+is by translating all the perspective objects by a vector
+before drawing them.
+
 Basic functions that should be implemented on each wview are:
 
 wview_initialize()
@@ -93,4 +98,49 @@ wview_redraw()
   For example, if client code has animation, it must call
   this function for every new frame to be draw.
 
+wview_process()
+  Theres a need to pass wview interface some of the CPU
+  time so it does internal processing. This is done using
+  this function where it supports two behaviours:
+  synchronous and asynchronous.
+
+  In synchronous behaviour, the function only returns when
+  the user closes the wview window. Client should then do
+  the cleanup, it shouldn't be assumed that any wview
+  cleanup was done.
+
+  In asynchronous behaviour, the function only does some
+  processing and then returns this way allowing the client
+  to use the thread to other processing. In this behaviour
+  the client should call this function periodically
+  (the frequency depends on the frequency of changed
+  objects in the window or if the window requires redraw).
+
+wview_set()
+  When initializing wview its possible to pass some
+  configuration parameters to the wview_init_t structure
+  however, there are options that can be dynamically
+  changed during the wview usage. This function allows
+  client code to change wview parameters while the
+  window is still running.
+
+  Parameter list is described next:
+
+  WVOPTION_TRANSLATE_VECTOR
+  Before the objects on the perspective mode are drawn
+  its possible to apply a translation vector to all
+  the objects. This sets that translation vector.
+
+  WVOPTION_ROTATE_VECTOR
+  Before the objects on the perspective mode are drawn
+  its possible to apply a rotation vector to all the
+  objects. This sets that rotation vector. It uses 4
+  coordinates. TODO: describe this better...
+
+  WVOPTION_TR_ORDER
+  Before the objects on the perspective mode are drawn
+  its possible to apply a rotation and/or a translation
+  to all the objects. This allows the client to select
+  the order of the transformation (first translate then
+  rotate or first rotate then translate).
 
