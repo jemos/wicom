@@ -68,5 +68,8 @@ wstatus wview_destroy_window(void);
 wstatus wview_draw_shape(shape_t shape);
 wstatus wview_redraw(void);
 
+wstatus wview_loop(void);
+wstatus wview_cicle(void);
+
 #endif
 

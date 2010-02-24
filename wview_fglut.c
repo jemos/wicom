@@ -24,11 +24,11 @@
    wview interface implementation using freeglut library.
 */
 
-#include "posh.h"
 
 #include <GL/freeglut.h>
 #include <stdbool.h>
 
+#include "posh.h"
 #include "wstatus.h"
 #include "debug.h"
 #include "shape.h"
@@ -81,17 +81,23 @@ void wview_display_func(void);
 wstatus
 wview_load(wview_load_t load)
 {
+	int argc = 1;
+	char *argv = "wicom";
+
 	dbgprint(MOD_WVIEW,__func__,"called");
 
 	/* set this to false before doing anything.. */
 	wview_loaded = false;
 
 	/* call freeglut initializing functions */
-	glutInit(0,0);
-	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
+	glutInit(&argc,(char**)&argv);
+	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
 
 	/* initialize window_id to null */
 	window_id = 0;
+
+	/* set some glut options */
+	glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE,GLUT_ACTION_GLUTMAINLOOP_RETURNS);
 
 	/* change loaded flag to true */
 	wview_loaded = true;
@@ -171,6 +177,13 @@ wview_create_window(wview_window_t window)
 	cltmouse_cb = window.mouse_routine;
 	dbgprint(MOD_WVIEW,__func__,"Set client mouse routine pointer to %p",window.mouse_routine);
 
+	/* set window size before creating it */
+	dbgprint(MOD_WVIEW,__func__,"Setting window size to %u x %u",window.width,window.height);
+	win_width = window.width;
+	win_height = window.height;
+	glutInitWindowSize(window.width,window.height);
+
+	/* create the window */
 	window_id = glutCreateWindow("wicom");
 
 	if( !window_id )
@@ -182,18 +195,14 @@ wview_create_window(wview_window_t window)
 
 	dbgprint(MOD_WVIEW,__func__,"Created window successfully (window id is %d)",window_id);
 
-	dbgprint(MOD_WVIEW,__func__,"Setting window size to %u x %u",window.width,window.height);
-	win_width = window.width;
-	win_height = window.height;
-	glutInitWindowSize(window.width,window.height);
-
 	/* initialize viewport */
 	dbgprint(MOD_WVIEW,__func__,"Initializing viewport...");
 
-	glClearColor (0.0, 0.0, 0.0, 0.0);
-	glOrtho(0.0f,win_width,win_height,0.0f,-1.0f,1.0f);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
+	glClearColor(0.0, 0.0, 0.0, 0.0);
+	glClearDepth(1.0);
+	glEnable(GL_DEPTH_TEST);
+	glDepthFunc(GL_LEQUAL);
+	glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 
 	/* initialize callbacks */
 	dbgprint(MOD_WVIEW,__func__,"Setting up window callbacks");
@@ -224,29 +233,34 @@ void wview_display_func(void)
 		return; 
 	}
 
-	/* setup OpenGL for a new draw */
-	glLoadIdentity();
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	glEnable(GL_DEPTH_TEST);
 
 	/* start with perspective mode */
+	
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	gluPerspective(45.0f,(GLfloat)win_width/(GLfloat)win_height,0.1f,win_depth);
 	glMatrixMode(GL_MODELVIEW);
+
 	glLoadIdentity();
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_DEPTH_TEST);
 	draw.flags = WVDRAW_FLAG_PERSPECTIVE;
+
+	glTranslated(0,0,-10.0);
 
 	accept_shapes = true;
 	cltdraw_cb(draw);
 	accept_shapes = false;
 
 	/* then orthogonal mode */
+	
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	glOrtho(0.0f,win_width,win_height,0.0f,-1.0f,1.0f);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDisable(GL_DEPTH_TEST);
 	draw.flags = WVDRAW_FLAG_ORTHOGONAL;
 	
 	accept_shapes = true;
@@ -286,11 +300,7 @@ void wview_reshape_func(int width,int height)
 
 	dbgprint(MOD_WVIEW,__func__,"Updated internal window size variables successfully");
 
-	dbgprint(MOD_WVIEW,__func__,"Calling glOrtho with new viewport size");
-
-	glOrtho(0.0f,width,height,0.0f,-1.0f,1.0f);
-
-	dbgprint(MOD_WVIEW,__func__,"Switching to model view matrix mode");
+	gluPerspective(45.0f,(GLfloat)width/(GLfloat)height,0.1f,100.0f);
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
@@ -591,6 +601,33 @@ draw_polyline(shape_t shape)
 wstatus
 draw_polygon(shape_t shape)
 {
+	dbgprint(MOD_WVIEW,__func__,"called");
+
+	/* get the line color */
+	glColor3d(shape.data.polygon.color.x,
+			shape.data.polygon.color.y,
+			shape.data.polygon.color.z );
+
+	dbgprint(MOD_WVIEW,__func__,"polygon color is (%0.2g, %0.2g, %0.2g)");
+
+	dbgprint(MOD_WVIEW,__func__,"inserting %u vertexes",shape.data.polygon.point_count);
+
+	/* draw the polygon */
+	glBegin(GL_POLYGON);
+	for( unsigned int i = 0 ; i < shape.data.polygon.point_count ; i++ )
+	{
+		dbgprint(MOD_WVIEW,__func__,"vertex #%u is at (%0.2g,%0.2g,%0.2g)",i,
+				shape.data.polygon.point_list[i].x,
+				shape.data.polygon.point_list[i].y,
+				shape.data.polygon.point_list[i].z );
+
+		glVertex3d(shape.data.polygon.point_list[i].x,
+				shape.data.polygon.point_list[i].y,
+				shape.data.polygon.point_list[i].z);
+	}
+	glEnd();
+
+	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
 	return WSTATUS_SUCCESS;
 }
 
@@ -637,5 +674,30 @@ wview_draw_shape(shape_t shape)
 
 	/* shouldn't get here, in any case...return failure. */
 	return WSTATUS_FAILURE;
+}
+
+wstatus
+wview_loop(void)
+{
+	dbgprint(MOD_WVIEW,__func__,"Called");
+
+	glutMainLoop();
+
+	dbgprint(MOD_WVIEW,__func__,"GLUT main loop returned, reseting window_id...");
+	window_id = 0;
+
+	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
+	return WSTATUS_SUCCESS;
+}
+
+wstatus
+wview_cicle(void)
+{
+//	dbgprint(MOD_WVIEW,__func__,"Called");
+
+	glutMainLoopEvent();
+
+//	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
+	return WSTATUS_SUCCESS;
 }
 

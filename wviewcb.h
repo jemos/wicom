@@ -5,7 +5,7 @@
 #include "posh.h"
 #include "wstatus.h"
 
-typedef union _wvkey_t
+typedef struct _wvkey_t
 {
 	unsigned int key;
 	unsigned int flags;

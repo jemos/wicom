@@ -1,7 +1,7 @@
 CC		= gcc
 CFLAGS	= -std=c99 -c -g -Wall -pedantic -I/opt/local/include/ -I/usr/X11/include
-LFLAGS	= -lm -framework GLUT -framework OpenGL -lpthread
-LIBS	=
+LFLAGS  =
+LIBS	= -L/usr/X11/lib /opt/local/lib/libglut.dylib -lglut -lm -framework OpenGL -lpthread -lXext -lX11 -lXxf86vm -lXi
 OBJS	= wview_fglut.o wicom.o debug.o jmlist.o wlock.o wthread.o
 
 #.SUFFIXES: .o .c
