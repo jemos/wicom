@@ -435,10 +435,20 @@ wview_destroy_window(void)
 		return WSTATUS_FAILURE;
 	}
 
+	/* In this specific case I'll not be intrusive to demand the client to know if the
+	   window was destroyed or not before calling this function. So if it was destroyed
+	   already, this function will simply return success. */
+
+//	if( !window_id ) {
+//		dbgprint(MOD_WVIEW,__func__,"Cannot destroy window because no window was created yet");
+//		dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
+//		return WSTATUS_FAILURE;
+//	}
+
 	if( !window_id ) {
-		dbgprint(MOD_WVIEW,__func__,"Cannot destroy window because no window was created yet");
-		dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
-		return WSTATUS_FAILURE;
+		dbgprint(MOD_WVIEW,__func__,"There is no window to destroy");
+		dbgprint(MOD_WVIEW,__func__,"Returning with success.");
+		return WSTATUS_SUCCESS;
 	}
 
 	/* call glut to destroy window */
@@ -676,28 +686,32 @@ wview_draw_shape(shape_t shape)
 	return WSTATUS_FAILURE;
 }
 
+
 wstatus
-wview_loop(void)
+wview_process(wview_mode_t mode)
 {
-	dbgprint(MOD_WVIEW,__func__,"Called");
+	if( (mode == WVIEW_ASYNCHRONOUS) && DEBUG_LOOPS )
+	dbgprint(MOD_WVIEW,__func__,"Called with mode=%d",mode);
 
-	glutMainLoop();
+	switch(mode)
+	{
+		case WVIEW_SYNCHRONOUS:
+			glutMainLoop();
+			dbgprint(MOD_WVIEW,__func__,"GLUT main loop returned, reseting window_id...");
+			window_id = 0;
+			break;
+		case WVIEW_ASYNCHRONOUS:
+			glutMainLoopEvent();
+			break;
+		default:
+			dbgprint(MOD_WVIEW,__func__,"Invalid or unsupported mode (%d)",mode);
+			dbgprint(MOD_WVIEW,__func__,"Returning with failure.");
+			return WSTATUS_FAILURE;
+	}
 
-	dbgprint(MOD_WVIEW,__func__,"GLUT main loop returned, reseting window_id...");
-	window_id = 0;
-
+	if( (mode == WVIEW_ASYNCHRONOUS) && DEBUG_LOOPS )
 	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
-	return WSTATUS_SUCCESS;
-}
 
-wstatus
-wview_cicle(void)
-{
-//	dbgprint(MOD_WVIEW,__func__,"Called");
-
-	glutMainLoopEvent();
-
-//	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
 	return WSTATUS_SUCCESS;
 }
 

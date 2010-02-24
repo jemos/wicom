@@ -83,11 +83,10 @@ int main(int argc,char *argv[])
 	wview_create_window(window);
 
 	/* enter draw loop */
-	wview_loop();
+	wview_process(WVIEW_SYNCHRONOUS);
 
 	/* close window */
-	//no need to call this with wview_loop()
-	//wview_destroy_window();
+	wview_destroy_window();
 
 	/* unload wview */
 	s = wview_unload();

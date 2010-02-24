@@ -61,6 +61,12 @@ typedef struct _wview_window_t
 	wvmouse_cb mouse_routine;
 } wview_window_t;
 
+typedef enum _wview_mode_t
+{
+	WVIEW_SYNCHRONOUS,
+	WVIEW_ASYNCHRONOUS
+} wview_mode_t;
+
 wstatus wview_load(wview_load_t load);
 wstatus wview_unload(void);
 wstatus wview_create_window(wview_window_t window);
@@ -68,8 +74,7 @@ wstatus wview_destroy_window(void);
 wstatus wview_draw_shape(shape_t shape);
 wstatus wview_redraw(void);
 
-wstatus wview_loop(void);
-wstatus wview_cicle(void);
+wstatus wview_process(wview_mode_t mode);
 
 #endif
 
