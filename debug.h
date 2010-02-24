@@ -46,6 +46,9 @@ typedef struct _modname {
 	const char *name;
 } modname;
 
+#define DBGRET_SUCCESS(mod) dbgprint(mod,__func__,"Returning with success."); return WSTATUS_SUCCESS;
+#define DBGRET_FAILURE(mod) dbgprint(mod,__func__,"Returning with failure."); return WSTATUS_FAILURE;
+
 wstatus modt2name(debug_mod_t module,const char **name);
 void dbgprint(debug_mod_t module,const char *func,char *fmt,...);
 
