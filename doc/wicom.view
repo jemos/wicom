@@ -22,6 +22,11 @@ or Linux).
 The wview should be able to create one window where the
 output will be draw according to calls made to wview.
 
+There should be two ways of giving CPU to wview one synchronous
+and asynchronous. This should be implemented using the function
+wview_process function which should have one argument to
+distinguish from those two modes.
+
 Basic functions that should be implemented on each wview are:
 
 wview_initialize()
