@@ -21,6 +21,10 @@
 #ifndef _DEBUG_H
 #define _DEBUG_H
 
+#ifndef DEBUG_LOOPS
+#define DEBUG_LOOPS 0
+#endif
+
 /* this enum is to identify each module and will be useful for
    debugging messages filtering. */
 typedef enum _debug_mod_t {
