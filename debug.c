@@ -36,7 +36,8 @@ modname modname_list[] = {
 	{MOD_DEBUG,"debug"},
 	{MOD_WTHREAD,"wthread"},
 	{MOD_WLOCK,"wlock"},
-	{MOD_WVIEW,"wview"}
+	{MOD_WVIEW,"wview"},
+	{MOD_WVIEWCTL,"wviewctl"}
 };
 #define MOD_COUNT (sizeof(modname_list)/sizeof(modname))
 
