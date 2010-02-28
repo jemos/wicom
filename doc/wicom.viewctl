@@ -32,3 +32,27 @@ Although, in the beginning shapes from the shapemgr should
 be very similar to the primitive shapes provided by wview
 in the future wview might have custom shapes made of various
 wview shapes (eg. label = text + background rectangle).
+
+WVIEWCTL INTERNALS
+
+This module might need to use multithreading and synchronization
+objects since all calls to the module are asynchronous in a
+way that they return always. They should do the action and return
+there is no loop function for wviewctl as there is in wview.
+This can raise issues with the multithreading support of wview
+interfaces. For that reason one thing should be assured, all
+calls made to wview interface are made using the same thread.
+
+When this module initializes, it creates a working thread.
+This thread will communicate with the wview interface, initialize,
+create the window, etc.
+
+The client then can call wviewctl functions without disturbing
+wview processing (like register callbacks to be included in
+the multiplexing, etc.).
+
+It is required then that the shapemgr and the plantmgr support
+multithreading, so they should use synchronization objects
+in the list of shapes and list of plants. The same applies to
+wviewctl in the case of callback lists.
+
