@@ -56,3 +56,9 @@ multithreading, so they should use synchronization objects
 in the list of shapes and list of plants. The same applies to
 wviewctl in the case of callback lists.
 
+ISSUE #1: how the client code above wviewctl knows when the user
+closes the window? there should exist a special callback passed
+in wviewctl initialization structure which should be called
+whenever this happens.
+
+
