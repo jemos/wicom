@@ -2,7 +2,7 @@ CC		= gcc
 CFLAGS	= -std=c99 -c -g -Wall -pedantic -I/opt/local/include/ -I/usr/X11/include
 LFLAGS  =
 LIBS	= -L/usr/X11/lib /opt/local/lib/libglut.dylib -lglut -lm -framework OpenGL -lpthread -lXext -lX11 -lXxf86vm -lXi
-OBJS	= wview_fglut.o wicom.o debug.o jmlist.o wlock.o wthread.o
+OBJS	= wview_fglut.o wviewctl.o wicom.o debug.o jmlist.o wlock.o wthread.o
 
 #.SUFFIXES: .o .c
 #.c.o:
@@ -28,6 +28,9 @@ wthread.o: wthread.c wthread.h
 
 wview_fglut.o: wview_fglut.c wview.h
 	$(CC) $(CFLAGS) -o wview_fglut.o wview_fglut.c
+
+wviewctl.o: wviewctl.c wviewctl.h
+	$(CC) $(CFLAGS) -o wviewctl.o wviewctl.c
 
 #%.o: %.c
 #	$(CC) $(CFLAGS) -o $@ $<

@@ -29,6 +29,7 @@
 #include "posh.h"
 #include "wstatus.h"
 #include "debug.h"
+#include "wviewctl.h"
 #include "wview.h"
 
 wstatus
@@ -130,6 +131,20 @@ int main(int argc,char *argv[])
 {
 	wstatus s;
 	wview_load_t load;
+	char buffer[32];
+
+	wvctl_load_t wvctl_l;
+	wvctl_l.exit_routine = 0;
+
+	s = wvctl_load(wvctl_l);
+
+	printf("wviewctl_load returned..");
+
+	fgets(buffer,sizeof(buffer),stdin);
+
+	wvctl_unload();
+	
+	return EXIT_SUCCESS;
 
 	/* load wview */
 	s = wview_load(load);
