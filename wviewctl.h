@@ -43,7 +43,7 @@ wstatus wvctl_load(wvctl_load_t load);
 wstatus wvctl_unload(void);
 
 wstatus wvctl_register_keyboard_cb(wvkeyboard_cb keycb,void *param); 
-wstatus wvctl_unregister_keyboard_cb(wvkeyboard_cb keycb,void *param); 
+wstatus wvctl_unregister_keyboard_cb(wvkeyboard_cb keycb); 
 wstatus wvctl_register_mouse_cb(wvmouse_cb mousecb,void *param); 
 wstatus wvctl_unregister_mouse_cb(wvmouse_cb mousecb,void *param); 
 wstatus wvctl_redraw(void);

@@ -19,6 +19,7 @@
 */
 
 #include <stdbool.h>
+#include <string.h>
 #ifndef sleep
 #include <unistd.h>
 #endif
@@ -500,26 +501,174 @@ wvctl_unload(void)
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
 }
 
+/*
+   wvctl_register_keyboard_cb
+
+   First check if the module is unloading, if so, return with error since
+   no callback should be registered in that state.
+
+   Then, try to acquire the lock on keyboard callback list so exclusive
+   access is granted. A lookup for existent entries with same keycb must
+   be done in order to avoid duplicate entries in the list.
+   
+   If there is no entry with same keycb in the list, add the keyboard
+   callback to the list.
+
+   Finally free the keyboard list lock.
+*/
 wstatus
 wvctl_register_keyboard_cb(wvkeyboard_cb keycb,void *param)
 {
+	wstatus ws;
+	jmlist_status jmls;
+	void *keycb_cpy;
+
+	memcpy((void*)keycb_cpy,(void*)&keycb,sizeof(wvkeyboard_cb));
+
+	dbgprint(MOD_WVIEWCTL,__func__,"called with keycb=%p and param=%p",keycb,param);
+
 	if( wvctl_unloading ) {
 		dbgprint(MOD_WVIEWCTL,__func__,"module is unloading, cannot register keyboard callback now");
 		DBGRET_FAILURE(MOD_WVIEWCTL);
 	}
 
+	if( !wvctl_loaded ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"cannot use this function while the module was not loaded yet");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"acquiring keyboard callback list lock");
+	ws = wlock_acquire(&keyboard_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to acquire keyboard callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"looking up if callback keycb=%p exists in the list",keycb);
+	jmlist_lookup_result lookup_result;
+	jmls = jmlist_ptr_exists(keyboard_cbl,keycb_cpy,&lookup_result);
+	if( jmls != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_ptr_exists failed");
+		goto release_and_fail;
+	}
+	
+	if( lookup_result == jmlist_entry_found ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"callback with keycb=%p already exists in the list",keycb);
+		goto release_and_fail;
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"adding keyboard callback to the list");
+	jmls = jmlist_insert(keyboard_cbl,keycb_cpy);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing keyboard callback list lock");
+	ws = wlock_release(&keyboard_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to add keyboard callback to the list");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"keyboard lock released successfully");
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
+
+release_and_fail:
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing keyboard callback list lock");
+	ws = wlock_release(&keyboard_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release lock");
+	}
+	DBGRET_FAILURE(MOD_WVIEWCTL);
 }
 
+/*
+   wvctl_unregister_keyboard_cb
+
+   First it should check if wvctl module is unloading, if it is, ignore the call
+   returning with failure. Then, acquire the keyboard callback list lock, so
+   it can access to the keyboard list and remove the specific callback. Callbacks
+   are identified only by the function address (keycb) so there shouldn't exist
+   two callbacks inside the callback list with the same value (this should be
+   checked in wvctl_register_keyboard_cb function when registering the callback).
+   After acquiring the callback list lock, the first thing it does is to lookup
+   for the entry in the callback list, if its not found report and return with
+   failure, otherwise proceed to the removal of the entry in the list.
+
+   Finally free the callback list lock.
+
+*/
 wstatus
-wvctl_unregister_keyboard_cb(wvkeyboard_cb keycb,void *param)
+wvctl_unregister_keyboard_cb(wvkeyboard_cb keycb)
 {
+	jmlist_status jmls;
+	wstatus ws;
+	void *keycb_cpy;
+
+	/* workaround for ISO C unsupport of void* to function pointer conversion,
+	this will only work if sizeof(void*) == sizeof(wvkeyboard_cb) */
+	memcpy((void*)keycb_cpy,(void*)&keycb,sizeof(wvkeyboard_cb));
+
 	if( wvctl_unloading ) {
 		dbgprint(MOD_WVIEWCTL,__func__,"module is unloading, cannot unregister keyboard callback now");
 		DBGRET_FAILURE(MOD_WVIEWCTL);
 	}
 
+	if( !wvctl_loaded ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"cannot use this function while the module was not loaded yet");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"acquiring keyboard callback list lock");
+	ws = wlock_acquire(&keyboard_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to acquire keyboard callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"looking up if callback keycb=%p exists in the list",keycb);
+	jmlist_lookup_result lookup_result;
+	jmls = jmlist_ptr_exists(keyboard_cbl,keycb_cpy,&lookup_result);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_ptr_exists failed");
+		goto release_and_fail;
+	}
+
+	if( lookup_result == jmlist_entry_not_found ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"the entry keycb=%p is not in the callback list",keycb);
+		goto release_and_fail;
+	}
+
+	jmls = jmlist_remove_by_ptr(keyboard_cbl,keycb_cpy);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing keyboard callback list lock");
+	ws = wlock_release(&keyboard_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to add keyboard callback to the list");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_remove_by_ptr() failed");
+		goto release_and_fail;
+	}
+
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
+
+release_and_fail:
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing keyboard callback list lock");
+	ws = wlock_release(&keyboard_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release lock");
+	}
+	DBGRET_FAILURE(MOD_WVIEWCTL);
 }
 
 wstatus
