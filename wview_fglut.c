@@ -22,6 +22,9 @@
    Module Description
 
    wview interface implementation using freeglut library.
+
+References:
+	[1] http://www.opengl.org/resources/faq/technical/selection.htm
 */
 
 
