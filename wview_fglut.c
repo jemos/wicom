@@ -409,7 +409,7 @@ void wview_mouse_func(int button,int state,int x,int y)
 	}
 
 	dbgprint(MOD_WVIEW,__func__,"Calling client mouse routine");
-	cltmouse_cb(mouse);
+	cltmouse_cb(mouse,0);
 	dbgprint(MOD_WVIEW,__func__,"Returned from the client mouse routine");
 
 	dbgprint(MOD_WVIEW,__func__,"Finished.");
@@ -448,7 +448,7 @@ void wview_keyboard_func(unsigned char key,int x,int y)
 
 	/* call the client callback for the WV_KEY_DOWN */
 	dbgprint(MOD_WVIEW,__func__,"Calling client keyboard routine with mode=WV_KEY_DOWN");
-	cltkeyboard_cb(key_event,WV_KEY_DOWN);
+	cltkeyboard_cb(key_event,WV_KEY_DOWN,0);
 	dbgprint(MOD_WVIEW,__func__,"Client routine returned");
 
 	dbgprint(MOD_WVIEW,__func__,"filling wvkey_t structure");
@@ -459,7 +459,7 @@ void wview_keyboard_func(unsigned char key,int x,int y)
 
 	/* call the client callback for the WV_KEY_UP */
 	dbgprint(MOD_WVIEW,__func__,"Calling client keyboard routine with mode=WV_KEY_UP");
-	cltkeyboard_cb(key_event,WV_KEY_UP);
+	cltkeyboard_cb(key_event,WV_KEY_UP,0);
 	dbgprint(MOD_WVIEW,__func__,"Client routine returned");
 
 	dbgprint(MOD_WVIEW,__func__,"Finished.");
