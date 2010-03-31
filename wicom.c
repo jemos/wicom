@@ -115,14 +115,14 @@ draw_routine(wvdraw_t draw)
 }
 
 wstatus POSH_CDECL
-keyboard_routine(wvkey_t key,wvkey_mode_t key_mode)
+keyboard_routine(wvkey_t key,wvkey_mode_t key_mode,void *param)
 {
 	printf("key pressed: <%02X>\n",key.key);
 	return WSTATUS_SUCCESS;
 }
 
 wstatus POSH_CDECL
-mouse_routine(wvmouse_t mouse)
+mouse_routine(wvmouse_t mouse,void *param)
 {
 	return WSTATUS_SUCCESS;
 }
@@ -139,6 +139,9 @@ int main(int argc,char *argv[])
 	s = wvctl_load(wvctl_l);
 
 	printf("wviewctl_load returned..");
+
+	wvctl_register_mouse_cb(mouse_routine,0);
+	wvctl_register_keyboard_cb(keyboard_routine,0);
 
 	fgets(buffer,sizeof(buffer),stdin);
 
