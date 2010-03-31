@@ -55,14 +55,14 @@ typedef struct _thread_init_status {
 
 /* some internal functions used by this module */
 
-wstatus wvctl_free_keyboard_cbl(void);
-wstatus wvctl_free_keyboard_cbl_lock(void);
-wstatus wvctl_free_mouse_cbl(void);
-wstatus wvctl_free_mouse_cbl_lock(void);
-void wvctl_worker_routine(void *param);
-wstatus wvctl_keyboard_routine(wvkey_t key,wvkey_mode_t key_mode);
-wstatus wvctl_mouse_routine(wvmouse_t mouse);
-wstatus wvctl_draw_routine(wvdraw_t draw);
+static wstatus wvctl_free_keyboard_cbl(void);
+static wstatus wvctl_free_keyboard_cbl_lock(void);
+static wstatus wvctl_free_mouse_cbl(void);
+static wstatus wvctl_free_mouse_cbl_lock(void);
+static void wvctl_worker_routine(void *param);
+static wstatus wvctl_keyboard_routine(wvkey_t key,wvkey_mode_t key_mode,void *param);
+static wstatus wvctl_mouse_routine(wvmouse_t mouse,void *param);
+static wstatus wvctl_draw_routine(wvdraw_t draw);
 
 /*
    wvctl_free_keyboard_cbl
@@ -368,7 +368,7 @@ wvctl_worker_routine(void *param)
    Request the keyboard callback list lock, then call all the client callbacks.
 */
 wstatus
-wvctl_keyboard_routine(wvkey_t key,wvkey_mode_t key_mode)
+wvctl_keyboard_routine(wvkey_t key,wvkey_mode_t key_mode,void *param)
 {
 	wstatus ws;
 	jmlist_status jmls;
@@ -415,7 +415,7 @@ wvctl_keyboard_routine(wvkey_t key,wvkey_mode_t key_mode)
 
 		/* call the client routine */
 		dbgprint(MOD_WVIEWCTL,__func__,"calling keyboard client routine %p (index %u)",keyboard_cb,i);
-		keyboard_cb(key,key_mode);
+		keyboard_cb(key,key_mode,0);
 		dbgprint(MOD_WVIEWCTL,__func__,"client routine returned");
 	}
 
@@ -441,7 +441,7 @@ wvctl_draw_routine(wvdraw_t draw)
 }
 
 wstatus
-wvctl_mouse_routine(wvmouse_t mouse)
+wvctl_mouse_routine(wvmouse_t mouse,void *param)
 {
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
 }
@@ -523,7 +523,7 @@ wvctl_register_keyboard_cb(wvkeyboard_cb keycb,void *param)
 	jmlist_status jmls;
 	void *keycb_cpy;
 
-	memcpy((void*)keycb_cpy,(void*)&keycb,sizeof(wvkeyboard_cb));
+	memcpy((void*)&keycb_cpy,(void*)&keycb,sizeof(wvkeyboard_cb));
 
 	dbgprint(MOD_WVIEWCTL,__func__,"called with keycb=%p and param=%p",keycb,param);
 
@@ -609,7 +609,7 @@ wvctl_unregister_keyboard_cb(wvkeyboard_cb keycb)
 
 	/* workaround for ISO C unsupport of void* to function pointer conversion,
 	this will only work if sizeof(void*) == sizeof(wvkeyboard_cb) */
-	memcpy((void*)keycb_cpy,(void*)&keycb,sizeof(wvkeyboard_cb));
+	memcpy((void*)&keycb_cpy,(void*)&keycb,sizeof(wvkeyboard_cb));
 
 	if( wvctl_unloading ) {
 		dbgprint(MOD_WVIEWCTL,__func__,"module is unloading, cannot unregister keyboard callback now");
@@ -651,15 +651,11 @@ wvctl_unregister_keyboard_cb(wvkeyboard_cb keycb)
 	}
 
 	if( jmls != JMLIST_ERROR_SUCCESS ) {
-		dbgprint(MOD_WVIEWCTL,__func__,"failed to add keyboard callback to the list");
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to remove keyboard callback to the list");
 		DBGRET_FAILURE(MOD_WVIEWCTL);
 	}
 
-	if( jmls != JMLIST_ERROR_SUCCESS ) {
-		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_remove_by_ptr() failed");
-		goto release_and_fail;
-	}
-
+	dbgprint(MOD_WVIEWCTL,__func__,"removed keyboard callback from the list successfully");
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
 
 release_and_fail:
@@ -671,26 +667,162 @@ release_and_fail:
 	DBGRET_FAILURE(MOD_WVIEWCTL);
 }
 
+/*
+   wvctl_register_mouse_cb
+
+   This function should work in the same way as of the keyboard register
+   callback function.
+
+   Before the callback is added, a search is done in the list so no
+   callbacks are inserted twice. One callback (identified only by
+   the routine address) can only be inserted once to the list,
+   otherwise this function will return error!
+*/
 wstatus
 wvctl_register_mouse_cb(wvmouse_cb mousecb,void *param)
 {
+	void *mousecb_cpy;
+	wstatus ws;
+	jmlist_status jmls;
+
+	/* workaround for ISO C unsupport of void* to function pointer conversion,
+	this will only work if sizeof(void*) == sizeof(wvmouse_cb) */
+	memcpy((void*)&mousecb_cpy,(void*)&mousecb,sizeof(wvmouse_cb));
+
 	if( wvctl_unloading ) {
 		dbgprint(MOD_WVIEWCTL,__func__,"module is unloading, cannot register mouse callback now");
 		DBGRET_FAILURE(MOD_WVIEWCTL);
 	}
 
+	if( !wvctl_loaded ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"cannot use this function while the module was not loaded yet");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"acquiring mouse callback list lock");
+	ws = wlock_acquire(&mouse_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to acquire mouse callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"looking up if callback mousecb=%p exists in the list",mousecb);
+	jmlist_lookup_result lookup_result;
+	jmls = jmlist_ptr_exists(mouse_cbl,mousecb_cpy,&lookup_result);
+	if( jmls != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_ptr_exists failed");
+		goto release_and_fail;
+	}
+	
+	if( lookup_result == jmlist_entry_found ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"callback with mousecb=%p already exists in the list",mousecb);
+		goto release_and_fail;
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"adding mouse callback to the list");
+	jmls = jmlist_insert(mouse_cbl,mousecb_cpy);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing mouse callback list lock");
+	ws = wlock_release(&mouse_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release mouse callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to add mouse callback to the list");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"mouse callback list lock released successfully");
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
+
+release_and_fail:
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing mouse callback list lock");
+	ws = wlock_release(&mouse_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release lock");
+	}
+	DBGRET_FAILURE(MOD_WVIEWCTL);
 }
 
+/*
+   wvctl_unregister_mouse_cb
+
+   This function is called whenever the client code wants to unregister
+   a mouse callback of the wviewctl. This function is multithread-safe
+   thanks to the synchronization objects used in this module.
+
+   This function cannot be used when the module was not loaded yet
+   or when the module is unloading (wvctl_unload was called).
+
+   Before the entry is removed this function first check if it actually
+   exists, if it doens't exist in the list this function returns error.
+*/
 wstatus
 wvctl_unregister_mouse_cb(wvmouse_cb mousecb,void *param)
 {
+	jmlist_status jmls;
+	wstatus ws;
+	void *mousecb_cpy;
+
+	/* workaround for ISO C unsupport of void* to function pointer conversion,
+	this will only work if sizeof(void*) == sizeof(wvkeyboard_cb) */
+	memcpy((void*)&mousecb_cpy,(void*)&mousecb,sizeof(wvmouse_cb));
+
 	if( wvctl_unloading ) {
 		dbgprint(MOD_WVIEWCTL,__func__,"module is unloading, cannot unregister mouse callback now");
 		DBGRET_FAILURE(MOD_WVIEWCTL);
 	}
 
+	if( !wvctl_loaded ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"cannot use this function while the module was not loaded yet");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"acquiring mouse callback list lock");
+	ws = wlock_acquire(&mouse_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to acquire mouse callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"looking up if callback mousecb=%p exists in the list",mousecb);
+	jmlist_lookup_result lookup_result;
+	jmls = jmlist_ptr_exists(mouse_cbl,mousecb_cpy,&lookup_result);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_ptr_exists failed");
+		goto release_and_fail;
+	}
+
+	if( lookup_result == jmlist_entry_not_found ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"the entry mousecb=%p is not in the callback list",mousecb);
+		goto release_and_fail;
+	}
+
+	jmls = jmlist_remove_by_ptr(mouse_cbl,mousecb_cpy);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing mouse callback list lock");
+	ws = wlock_release(&mouse_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release mouse callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to remove the mouse callback from the list");
+		goto release_and_fail;
+	}
+
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
+
+release_and_fail:
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing mouse callback list lock");
+	ws = wlock_release(&mouse_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release mouse callback list lock");
+	}
+	DBGRET_FAILURE(MOD_WVIEWCTL);
 }
 
 wstatus
