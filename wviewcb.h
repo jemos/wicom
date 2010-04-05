@@ -47,9 +47,25 @@ typedef struct _wvdraw_t
 } wvdraw_t;
 
 
+
 typedef wstatus (POSH_CDECL *wvkeyboard_cb)(wvkey_t key,wvkey_mode_t key_mode,void *param);
 typedef wstatus (POSH_CDECL *wvmouse_cb)(wvmouse_t mouse,void *param);
-typedef wstatus (POSH_CDECL *wvdraw_cb)(wvdraw_t draw);
+typedef wstatus (POSH_CDECL *wvdraw_cb)(wvdraw_t draw,void *param);
+
+typedef struct _wvkeyboardcb_t {
+	wvkeyboard_cb cb;
+	void *param;
+} wvkeyboardcb_t;
+
+typedef struct _wvmousecb_t {
+	wvmouse_cb cb;
+	void *param;
+} wvmousecb_t;
+
+typedef struct _wvdrawcb_t {
+	wvdraw_cb cb;
+	void *param;
+} wvdrawcb_t;
 
 #endif
 
