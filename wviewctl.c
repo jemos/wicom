@@ -40,6 +40,9 @@ static jmlist keyboard_cbl;
 static wlock_t keyboard_cbl_lock;
 static jmlist mouse_cbl;
 static wlock_t mouse_cbl_lock;
+static jmlist draw_cbl;
+static wlock_t draw_cbl_lock;
+
 static bool wvctl_loaded = false;
 static bool wvctl_unloading = false;
 
@@ -62,12 +65,30 @@ static wstatus wvctl_free_mouse_cbl_lock(void);
 static void wvctl_worker_routine(void *param);
 static wstatus wvctl_keyboard_routine(wvkey_t key,wvkey_mode_t key_mode,void *param);
 static wstatus wvctl_mouse_routine(wvmouse_t mouse,void *param);
-static wstatus wvctl_draw_routine(wvdraw_t draw);
+static wstatus wvctl_draw_routine(wvdraw_t draw,void *param);
+
+/*
+   wvctl_free_keyboard_cb
+
+   Internal helper function to free a single keyboard callback structure.
+*/
+wstatus
+wvctl_free_keyboard_cb(wvkeyboardcb_t *keycb)
+{
+	dbgprint(MOD_WVIEWCTL,__func__,"called with keycb=%p",keycb);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"freeing keycb=%p\n",keycb);
+	free(keycb);
+	dbgprint(MOD_WVIEWCTL,__func__,"keyboard callback with keycb=%p was freed successfully",keycb);
+
+	DBGRET_SUCCESS(MOD_WVIEWCTL);
+}
 
 /*
    wvctl_free_keyboard_cbl
 
-   Internal helper function to free keyboard callback list and its lock.
+   Internal helper function to free keyboard callback list and its lock. This function
+   doesn't acquire the keyboard callback list lock, the caller is responsible for that.
 */
 wstatus
 wvctl_free_keyboard_cbl(void)
@@ -77,13 +98,69 @@ wvctl_free_keyboard_cbl(void)
 
 	dbgprint(MOD_WVIEWCTL,__func__,"freeing keyboard callback list");
 	
-	jmls = jmlist_free(keyboard_cbl);
+	jmlist_index cbcount;
+	jmls = jmlist_entry_count(keyboard_cbl,&cbcount);
 	if( jmls != JMLIST_ERROR_SUCCESS ) {
-		/* something went wrong with the free, program should abort ASAP.. */
-		dbgprint(MOD_WVIEWCTL,__func__,"unable to free keyboard callback list");
+		/* something went wrong with getting entry count! */
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to get number of callback entries in keyboard callback list");
 		DBGRET_FAILURE(MOD_WVIEWCTL);
 	}
 
+	if( cbcount == 0 ) {
+//		dbgprint(MOD_WVIEWCTL,__func__,"cannot free keyboard callback list because its empty");
+//		DBGRET_FAILURE(MOD_WVIEWCTL);
+		dbgprint(MOD_WVIEWCTL,__func__,"list of callbacks is empty");
+		DBGRET_SUCCESS(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"freeing %u callbacks from keyboard callback list",cbcount);
+
+	wvkeyboardcb_t *keycb;
+	jmlist_index cbcount_org = cbcount-1;
+	while( cbcount-- )
+	{
+		jmls = jmlist_pop(keyboard_cbl,&keycb);
+	
+		if( jmls != JMLIST_ERROR_SUCCESS )
+	   	{
+			dbgprint(MOD_WVIEWCTL,__func__,"unable to pop keyboard list entry");
+			if( cbcount_org != cbcount )
+				dbgprint(MOD_WVIEWCTL,__func__,"warning!! keyboard callback list was partially freed");
+			DBGRET_FAILURE(MOD_WVIEWCTL);
+		}
+	
+		dbgprint(MOD_WVIEWCTL,__func__,"calling wvctl_free_keyboard_cb(keycb=%p)",keycb);
+		ws = wvctl_free_keyboard_cb(keycb);
+		dbgprint(MOD_WVIEWCTL,__func__,"wvctl_free_keyboard_cb returned with ws=%u",ws);
+	
+		if( ws != WSTATUS_SUCCESS ) 
+		{
+			dbgprint(MOD_WVIEWCTL,__func__,"wvctl_free_keyboard_cb failed");
+			if( cbcount_org != cbcount )
+				dbgprint(MOD_WVIEWCTL,__func__,"warning!! keyboard callback list was partially freed");
+			DBGRET_FAILURE(MOD_WVIEWCTL);
+		}
+
+		/* continue to the next callback entry.. */
+	}
+
+	/* check if the entry count is zero now. */
+	jmls = jmlist_entry_count(keyboard_cbl,&cbcount);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		/* something went wrong with getting entry count! */
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to get number of callback entries in keyboard callback list (after free loop)");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	/* still have entries... means some other thread is adding entries to the list
+	and the code is broken because its not verifying that we're unloading the module! */
+	if( cbcount ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"after free loop there are still entries in the list, is *anyone* adding entries to the list?");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	/* all entries removed successfully. */
+	dbgprint(MOD_WVIEWCTL,__func__,"all keyboard callback list entries were freed successfully");
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
 }
 
@@ -128,6 +205,7 @@ wvctl_free_keyboard_cbl_lock(void)
 		DBGRET_FAILURE(MOD_WVIEWCTL);
 	}
 
+	dbgprint(MOD_WVIEWCTL,__func__,"keyboard callback list lock was freed successfully");
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
 }
 
@@ -443,7 +521,69 @@ wvctl_draw_routine(wvdraw_t draw)
 wstatus
 wvctl_mouse_routine(wvmouse_t mouse,void *param)
 {
+	wstatus ws;
+	jmlist_status jmls;
+
+	dbgprint(MOD_WVIEWCTL,__func__,"called with mouse.button=%d, mouse.coord=(%d,%d) and mouse.mode=%d",
+			mouse.button,mouse.x,mouse.y,mouse.mode);
+
+	if( ! wvctl_loaded ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unexpected call to this function, module not loaded yet");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( wvctl_unloading ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"module is unloading, ignoring this call");
+		DBGRET_SUCCESS(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"acquiring mouse callback list lock");
+	ws = wlock_acquire(&mouse_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to acquire mouse callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	/* now that we've the lock, parse the keybaord callback list */
+	
+	jmlist_index entry_count;
+
+	jmls = jmlist_entry_count(mouse_cbl,&entry_count);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to get mouse callback list entry count!");
+		goto free_lock_fail;
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"mouse callback list has %u entries now",entry_count);
+	
+	wvmouse_cb mouse_cb;
+	for( jmlist_index i = 0 ; i < entry_count ; i++ )
+	{
+		jmls = jmlist_get_by_index(mouse_cbl,i,(void*)&mouse_cb);
+		if( jmls != JMLIST_ERROR_SUCCESS ) {
+			dbgprint(MOD_WVIEWCTL,__func__,"unable to get mouse callback list entry #%u",i);
+			goto free_lock_fail;
+		}
+
+		/* call the client routine */
+		dbgprint(MOD_WVIEWCTL,__func__,"calling mouse client routine %p (index %u)",mouse_cb,i);
+		mouse_cb(mouse,0);
+		dbgprint(MOD_WVIEWCTL,__func__,"mouse client routine returned");
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"all mouse callbacks called, freeing lock");
+	ws = wlock_release(&mouse_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release mouse callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"mouse lock released successfully");
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
+
+free_lock_fail:
+	wlock_release(&mouse_cbl_lock);
+	DBGRET_FAILURE(MOD_WVIEWCTL);
 }
 
 /*
