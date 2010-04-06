@@ -292,7 +292,7 @@ void wview_display_func(void)
 
 	draw.flags = WVDRAW_FLAG_PERSPECTIVE;
 	accept_shapes = true;
-	cltdraw_cb(draw);
+	cltdraw_cb(draw,0);
 	accept_shapes = false;
 
 	/* then orthogonal mode */
@@ -305,7 +305,7 @@ void wview_display_func(void)
 
 	draw.flags = WVDRAW_FLAG_ORTHOGONAL;
 	accept_shapes = true;
-	cltdraw_cb(draw);
+	cltdraw_cb(draw,0);
 	accept_shapes = false;
 
 	/* swap buffers in GL */

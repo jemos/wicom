@@ -23,6 +23,7 @@
 #ifndef sleep
 #include <unistd.h>
 #endif
+#include <stdlib.h>
 
 #include "posh.h"
 #include "wstatus.h"
@@ -62,10 +63,16 @@ static wstatus wvctl_free_keyboard_cbl(void);
 static wstatus wvctl_free_keyboard_cbl_lock(void);
 static wstatus wvctl_free_mouse_cbl(void);
 static wstatus wvctl_free_mouse_cbl_lock(void);
+static wstatus wvctl_free_draw_cbl(void);
+static wstatus wvctl_free_draw_cbl_lock(void);
 static void wvctl_worker_routine(void *param);
 static wstatus wvctl_keyboard_routine(wvkey_t key,wvkey_mode_t key_mode,void *param);
 static wstatus wvctl_mouse_routine(wvmouse_t mouse,void *param);
 static wstatus wvctl_draw_routine(wvdraw_t draw,void *param);
+
+static jmlist_status iwvctl_find_keycb(void *ptr,void *param,jmlist_lookup_result *result);
+static jmlist_status iwvctl_find_mousecb(void *ptr,void *param,jmlist_lookup_result *result);
+static jmlist_status iwvctl_find_drawcb(void *ptr,void *param,jmlist_lookup_result *result);
 
 /*
    wvctl_free_keyboard_cb
@@ -94,6 +101,7 @@ wstatus
 wvctl_free_keyboard_cbl(void)
 {
 	jmlist_status jmls;
+	wstatus ws;
 	dbgprint(MOD_WVIEWCTL,__func__,"called");
 
 	dbgprint(MOD_WVIEWCTL,__func__,"freeing keyboard callback list");
@@ -115,11 +123,11 @@ wvctl_free_keyboard_cbl(void)
 
 	dbgprint(MOD_WVIEWCTL,__func__,"freeing %u callbacks from keyboard callback list",cbcount);
 
-	wvkeyboardcb_t *keycb;
+	wvkeyboardcb_t *keycbt_ptr;
 	jmlist_index cbcount_org = cbcount-1;
 	while( cbcount-- )
 	{
-		jmls = jmlist_pop(keyboard_cbl,&keycb);
+		jmls = jmlist_pop(keyboard_cbl,(void*)&keycbt_ptr);
 	
 		if( jmls != JMLIST_ERROR_SUCCESS )
 	   	{
@@ -129,8 +137,8 @@ wvctl_free_keyboard_cbl(void)
 			DBGRET_FAILURE(MOD_WVIEWCTL);
 		}
 	
-		dbgprint(MOD_WVIEWCTL,__func__,"calling wvctl_free_keyboard_cb(keycb=%p)",keycb);
-		ws = wvctl_free_keyboard_cb(keycb);
+		dbgprint(MOD_WVIEWCTL,__func__,"calling wvctl_free_keyboard_cb(keycbt=%p)",keycbt_ptr);
+		ws = wvctl_free_keyboard_cb(keycbt_ptr);
 		dbgprint(MOD_WVIEWCTL,__func__,"wvctl_free_keyboard_cb returned with ws=%u",ws);
 	
 		if( ws != WSTATUS_SUCCESS ) 
@@ -305,6 +313,38 @@ wvctl_load(wvctl_load_t load)
 		DBGRET_FAILURE(MOD_WVIEWCTL);
 	}
 
+	jmlp.flags = JMLIST_LINKED;
+	dbgprint(MOD_WVIEWCTL,__func__,"creating jmlist for draw callback list");
+	jmls = jmlist_create(&draw_cbl,&jmlp);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to create jmlist (status=%d)",jmls);
+		
+		/* if this has failed, we should free the rest of the objects that were created
+		 since the module will have unloaded state. */
+		wvctl_free_keyboard_cbl();
+		wvctl_free_keyboard_cbl_lock();
+		wvctl_free_mouse_cbl();
+		wvctl_free_mouse_cbl_lock();
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"created jmlist for draw callback list successfully (jml=%p)",mouse_cbl);
+	dbgprint(MOD_WVIEWCTL,__func__,"creating wlock for draw callback list");
+
+	ws = wlock_create(&draw_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"wlock creation failed for draw callback list");
+
+		/* if this has failed, we should free the rest of the objects that were created
+		 since the module will have unloaded state. */
+		wvctl_free_keyboard_cbl();
+		wvctl_free_keyboard_cbl_lock();
+		wvctl_free_mouse_cbl();
+		wvctl_free_mouse_cbl_lock();
+		wvctl_free_draw_cbl();
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
 	/* if the load structure is not initialized, it might cause a crash when unloading
 	   this module... */
 	dbgprint(MOD_WVIEWCTL,__func__,"setting up the exit routine to %p",load.exit_routine);
@@ -450,6 +490,7 @@ wvctl_keyboard_routine(wvkey_t key,wvkey_mode_t key_mode,void *param)
 {
 	wstatus ws;
 	jmlist_status jmls;
+	wvkeyboardcb_t *keycbt_ptr;
 
 	dbgprint(MOD_WVIEWCTL,__func__,"called with key=%02X and key_mode=%d",key,key_mode);
 
@@ -482,18 +523,18 @@ wvctl_keyboard_routine(wvkey_t key,wvkey_mode_t key_mode,void *param)
 
 	dbgprint(MOD_WVIEWCTL,__func__,"keyboard callback list has %u entries now",entry_count);
 	
-	wvkeyboard_cb keyboard_cb;
 	for( jmlist_index i = 0 ; i < entry_count ; i++ )
 	{
-		jmls = jmlist_get_by_index(keyboard_cbl,i,(void*)&keyboard_cb);
+		jmls = jmlist_get_by_index(keyboard_cbl,i,(void*)&keycbt_ptr);
 		if( jmls != JMLIST_ERROR_SUCCESS ) {
 			dbgprint(MOD_WVIEWCTL,__func__,"unable to get keyboard callback list entry #%u",i);
 			goto free_lock_fail;
 		}
 
 		/* call the client routine */
-		dbgprint(MOD_WVIEWCTL,__func__,"calling keyboard client routine %p (index %u)",keyboard_cb,i);
-		keyboard_cb(key,key_mode,0);
+		dbgprint(MOD_WVIEWCTL,__func__,"calling keyboard client routine %p (index %u, param=%p)",
+				keycbt_ptr->cb,i,keycbt_ptr->param);
+		keycbt_ptr->cb(key,key_mode,keycbt_ptr->param);
 		dbgprint(MOD_WVIEWCTL,__func__,"client routine returned");
 	}
 
@@ -513,16 +554,11 @@ free_lock_fail:
 }
 
 wstatus
-wvctl_draw_routine(wvdraw_t draw)
-{
-	DBGRET_SUCCESS(MOD_WVIEWCTL);
-}
-
-wstatus
 wvctl_mouse_routine(wvmouse_t mouse,void *param)
 {
 	wstatus ws;
 	jmlist_status jmls;
+	wvmousecb_t *mousecbt_ptr;
 
 	dbgprint(MOD_WVIEWCTL,__func__,"called with mouse.button=%d, mouse.coord=(%d,%d) and mouse.mode=%d",
 			mouse.button,mouse.x,mouse.y,mouse.mode);
@@ -556,18 +592,18 @@ wvctl_mouse_routine(wvmouse_t mouse,void *param)
 
 	dbgprint(MOD_WVIEWCTL,__func__,"mouse callback list has %u entries now",entry_count);
 	
-	wvmouse_cb mouse_cb;
 	for( jmlist_index i = 0 ; i < entry_count ; i++ )
 	{
-		jmls = jmlist_get_by_index(mouse_cbl,i,(void*)&mouse_cb);
+		jmls = jmlist_get_by_index(mouse_cbl,i,(void*)&mousecbt_ptr);
 		if( jmls != JMLIST_ERROR_SUCCESS ) {
 			dbgprint(MOD_WVIEWCTL,__func__,"unable to get mouse callback list entry #%u",i);
 			goto free_lock_fail;
 		}
 
 		/* call the client routine */
-		dbgprint(MOD_WVIEWCTL,__func__,"calling mouse client routine %p (index %u)",mouse_cb,i);
-		mouse_cb(mouse,0);
+		dbgprint(MOD_WVIEWCTL,__func__,"calling mouse client routine %p (index %u, param=%p)",
+				mousecbt_ptr->cb,i,mousecbt_ptr->param);
+		mousecbt_ptr->cb(mouse,mousecbt_ptr->param);
 		dbgprint(MOD_WVIEWCTL,__func__,"mouse client routine returned");
 	}
 
@@ -628,6 +664,11 @@ wvctl_unload(void)
 	wvctl_free_mouse_cbl();
 	dbgprint(MOD_WVIEWCTL,__func__,"freeing mouse callback list lock");
 	wvctl_free_mouse_cbl_lock();
+	dbgprint(MOD_WVIEWCTL,__func__,"freeing draw callback list");
+	wvctl_free_draw_cbl();
+	dbgprint(MOD_WVIEWCTL,__func__,"freeing draw callback list lock");
+	wvctl_free_draw_cbl_lock();
+
 	dbgprint(MOD_WVIEWCTL,__func__,"changing exit_routine to NULL");
 	exit_routine = 0;
 
@@ -639,6 +680,54 @@ wvctl_unload(void)
 
 	dbgprint(MOD_WVIEWCTL,__func__,"module unloaded successfully");
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
+}
+
+/*
+   iwvctl_find_mousecb
+
+   Internal callback to be used with jmlist to find a specific mouse
+   callback in the callback list.
+*/
+jmlist_status
+iwvctl_find_mousecb(void *ptr,void *param,jmlist_lookup_result *result)
+{
+	wvmousecb_t *mousecbt_ptr;
+	wvmouse_cb mousecb;
+
+	/* initialize variables */
+	mousecbt_ptr = (wvmousecb_t*)ptr;
+	memcpy(&mousecb,param,sizeof(wvmouse_cb));
+
+	if( mousecbt_ptr->cb == mousecb )
+		*result = jmlist_entry_found;
+	else
+		*result = jmlist_entry_not_found;
+
+	return JMLIST_ERROR_SUCCESS;
+}
+
+/*
+   iwvctl_find_keycb
+
+   Internal callback to be used with jmlist to find a specific keyboard
+   callback in the callback list.
+*/
+jmlist_status
+iwvctl_find_keycb(void *ptr,void *param,jmlist_lookup_result *result)
+{
+	wvkeyboardcb_t *keycb_data;
+	wvkeyboard_cb keycb;
+	
+	/* initialize variables */
+	keycb_data = (wvkeyboardcb_t*)ptr;
+	memcpy(&keycb,param,sizeof(wvkeyboard_cb));
+
+	if( keycb_data->cb == keycb )
+		*result = jmlist_entry_found;
+	else
+		*result = jmlist_entry_not_found;
+
+	return JMLIST_ERROR_SUCCESS;
 }
 
 /*
@@ -662,6 +751,7 @@ wvctl_register_keyboard_cb(wvkeyboard_cb keycb,void *param)
 	wstatus ws;
 	jmlist_status jmls;
 	void *keycb_cpy;
+	wvkeyboardcb_t *new_keycbt;
 
 	memcpy((void*)&keycb_cpy,(void*)&keycb,sizeof(wvkeyboard_cb));
 
@@ -686,9 +776,9 @@ wvctl_register_keyboard_cb(wvkeyboard_cb keycb,void *param)
 
 	dbgprint(MOD_WVIEWCTL,__func__,"looking up if callback keycb=%p exists in the list",keycb);
 	jmlist_lookup_result lookup_result;
-	jmls = jmlist_ptr_exists(keyboard_cbl,keycb_cpy,&lookup_result);
+	jmls = jmlist_find(keyboard_cbl,iwvctl_find_keycb,keycb_cpy,&lookup_result,0);
 	if( jmls != WSTATUS_SUCCESS ) {
-		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_ptr_exists failed");
+		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_find failed");
 		goto release_and_fail;
 	}
 	
@@ -697,8 +787,22 @@ wvctl_register_keyboard_cb(wvkeyboard_cb keycb,void *param)
 		goto release_and_fail;
 	}
 
-	dbgprint(MOD_WVIEWCTL,__func__,"adding keyboard callback to the list");
-	jmls = jmlist_insert(keyboard_cbl,keycb_cpy);
+	new_keycbt = (wvkeyboardcb_t*)malloc(sizeof(wvkeyboardcb_t));
+	if( !new_keycbt ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"malloc failed");
+		goto release_and_fail;
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"allocated new keyboard callback structure (new_keycbt=%p)",new_keycbt);
+
+	new_keycbt->cb = keycb;
+	new_keycbt->param = param;
+
+	dbgprint(MOD_WVIEWCTL,__func__,"filled new structure with cb=%p and param=%p",
+			new_keycbt->cb,new_keycbt->param);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"adding keyboard callback structure to the list");
+	jmls = jmlist_insert(keyboard_cbl,new_keycbt);
 
 	dbgprint(MOD_WVIEWCTL,__func__,"releasing keyboard callback list lock");
 	ws = wlock_release(&keyboard_cbl_lock);
@@ -746,6 +850,7 @@ wvctl_unregister_keyboard_cb(wvkeyboard_cb keycb)
 	jmlist_status jmls;
 	wstatus ws;
 	void *keycb_cpy;
+	wvkeyboardcb_t *keycbt_ptr;
 
 	/* workaround for ISO C unsupport of void* to function pointer conversion,
 	this will only work if sizeof(void*) == sizeof(wvkeyboard_cb) */
@@ -770,7 +875,7 @@ wvctl_unregister_keyboard_cb(wvkeyboard_cb keycb)
 
 	dbgprint(MOD_WVIEWCTL,__func__,"looking up if callback keycb=%p exists in the list",keycb);
 	jmlist_lookup_result lookup_result;
-	jmls = jmlist_ptr_exists(keyboard_cbl,keycb_cpy,&lookup_result);
+	jmls = jmlist_find(keyboard_cbl,iwvctl_find_keycb,keycb_cpy,&lookup_result,(void*)&keycbt_ptr);
 	if( jmls != JMLIST_ERROR_SUCCESS ) {
 		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_ptr_exists failed");
 		goto release_and_fail;
@@ -781,7 +886,7 @@ wvctl_unregister_keyboard_cb(wvkeyboard_cb keycb)
 		goto release_and_fail;
 	}
 
-	jmls = jmlist_remove_by_ptr(keyboard_cbl,keycb_cpy);
+	jmls = jmlist_remove_by_ptr(keyboard_cbl,keycbt_ptr);
 
 	dbgprint(MOD_WVIEWCTL,__func__,"releasing keyboard callback list lock");
 	ws = wlock_release(&keyboard_cbl_lock);
@@ -796,6 +901,10 @@ wvctl_unregister_keyboard_cb(wvkeyboard_cb keycb)
 	}
 
 	dbgprint(MOD_WVIEWCTL,__func__,"removed keyboard callback from the list successfully");
+
+	free(keycbt_ptr);
+	dbgprint(MOD_WVIEWCTL,__func__,"freed keyboard callback structure memory");
+
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
 
 release_and_fail:
@@ -824,6 +933,7 @@ wvctl_register_mouse_cb(wvmouse_cb mousecb,void *param)
 	void *mousecb_cpy;
 	wstatus ws;
 	jmlist_status jmls;
+	wvmousecb_t *new_mousecbt;
 
 	/* workaround for ISO C unsupport of void* to function pointer conversion,
 	this will only work if sizeof(void*) == sizeof(wvmouse_cb) */
@@ -848,9 +958,9 @@ wvctl_register_mouse_cb(wvmouse_cb mousecb,void *param)
 
 	dbgprint(MOD_WVIEWCTL,__func__,"looking up if callback mousecb=%p exists in the list",mousecb);
 	jmlist_lookup_result lookup_result;
-	jmls = jmlist_ptr_exists(mouse_cbl,mousecb_cpy,&lookup_result);
+	jmls = jmlist_find(mouse_cbl,iwvctl_find_mousecb,mousecb_cpy,&lookup_result,0);
 	if( jmls != WSTATUS_SUCCESS ) {
-		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_ptr_exists failed");
+		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_find failed");
 		goto release_and_fail;
 	}
 	
@@ -858,10 +968,24 @@ wvctl_register_mouse_cb(wvmouse_cb mousecb,void *param)
 		dbgprint(MOD_WVIEWCTL,__func__,"callback with mousecb=%p already exists in the list",mousecb);
 		goto release_and_fail;
 	}
-
-	dbgprint(MOD_WVIEWCTL,__func__,"adding mouse callback to the list");
-	jmls = jmlist_insert(mouse_cbl,mousecb_cpy);
-
+	
+	new_mousecbt = (wvmousecb_t*)malloc(sizeof(wvmousecb_t));
+	if( !new_mousecbt ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"malloc failed");
+		goto release_and_fail;
+	}
+	
+	dbgprint(MOD_WVIEWCTL,__func__,"allocated new mouse callback structure (new_mousecbt=%p)",new_mousecbt);
+	
+	new_mousecbt->cb = mousecb;
+	new_mousecbt->param = param;
+	
+	dbgprint(MOD_WVIEWCTL,__func__,"filled new structure with cb=%p and param=%p",
+			 new_mousecbt->cb,new_mousecbt->param);
+	
+	dbgprint(MOD_WVIEWCTL,__func__,"adding mouse callback structure to the list");
+	jmls = jmlist_insert(mouse_cbl,new_mousecbt);
+	
 	dbgprint(MOD_WVIEWCTL,__func__,"releasing mouse callback list lock");
 	ws = wlock_release(&mouse_cbl_lock);
 	if( ws != WSTATUS_SUCCESS ) {
@@ -900,11 +1024,14 @@ release_and_fail:
    exists, if it doens't exist in the list this function returns error.
 */
 wstatus
-wvctl_unregister_mouse_cb(wvmouse_cb mousecb,void *param)
+wvctl_unregister_mouse_cb(wvmouse_cb mousecb)
 {
 	jmlist_status jmls;
 	wstatus ws;
 	void *mousecb_cpy;
+	wvmousecb_t *mousecbt_ptr;
+
+	dbgprint(MOD_WVIEWCTL,__func__,"called with mousecb=%p",mousecb);
 
 	/* workaround for ISO C unsupport of void* to function pointer conversion,
 	this will only work if sizeof(void*) == sizeof(wvkeyboard_cb) */
@@ -929,7 +1056,7 @@ wvctl_unregister_mouse_cb(wvmouse_cb mousecb,void *param)
 
 	dbgprint(MOD_WVIEWCTL,__func__,"looking up if callback mousecb=%p exists in the list",mousecb);
 	jmlist_lookup_result lookup_result;
-	jmls = jmlist_ptr_exists(mouse_cbl,mousecb_cpy,&lookup_result);
+	jmls = jmlist_find(mouse_cbl,iwvctl_find_mousecb,mousecb_cpy,&lookup_result,(void*)&mousecbt_ptr);
 	if( jmls != JMLIST_ERROR_SUCCESS ) {
 		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_ptr_exists failed");
 		goto release_and_fail;
@@ -940,7 +1067,7 @@ wvctl_unregister_mouse_cb(wvmouse_cb mousecb,void *param)
 		goto release_and_fail;
 	}
 
-	jmls = jmlist_remove_by_ptr(mouse_cbl,mousecb_cpy);
+	jmls = jmlist_remove_by_ptr(mouse_cbl,mousecbt_ptr);
 
 	dbgprint(MOD_WVIEWCTL,__func__,"releasing mouse callback list lock");
 	ws = wlock_release(&mouse_cbl_lock);
@@ -953,6 +1080,9 @@ wvctl_unregister_mouse_cb(wvmouse_cb mousecb,void *param)
 		dbgprint(MOD_WVIEWCTL,__func__,"failed to remove the mouse callback from the list");
 		goto release_and_fail;
 	}
+	
+	free(mousecbt_ptr);
+	dbgprint(MOD_WVIEWCTL,__func__,"freed mouse callback structure memory");
 
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
 
@@ -971,3 +1101,402 @@ wvctl_redraw(void)
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
 }
 
+/*
+   wvctl_free_draw_cb
+
+   Internal helper function to free a single draw callback structure.
+*/
+wstatus
+wvctl_free_draw_cb(wvdrawcb_t *drawcb)
+{
+	dbgprint(MOD_WVIEWCTL,__func__,"called with drawcb=%p",drawcb);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"freeing drawcb=%p\n",drawcb);
+	free(drawcb);
+	dbgprint(MOD_WVIEWCTL,__func__,"draw callback with drawcb=%p was freed successfully",drawcb);
+
+	DBGRET_SUCCESS(MOD_WVIEWCTL);
+}
+
+/*
+   wvctl_free_draw_cbl
+
+   Internal helper function to free draw callback list and its lock. This function
+   doesn't acquire the draw callback list lock, the caller is responsible for that.
+*/
+wstatus
+wvctl_free_draw_cbl(void)
+{
+	jmlist_status jmls;
+	wstatus ws;
+	dbgprint(MOD_WVIEWCTL,__func__,"called");
+
+	dbgprint(MOD_WVIEWCTL,__func__,"freeing draw callback list");
+	
+	jmlist_index cbcount;
+	jmls = jmlist_entry_count(draw_cbl,&cbcount);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		/* something went wrong with getting entry count! */
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to get number of callback entries in draw callback list");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( cbcount == 0 ) {
+//		dbgprint(MOD_WVIEWCTL,__func__,"cannot free draw callback list because its empty");
+//		DBGRET_FAILURE(MOD_WVIEWCTL);
+		dbgprint(MOD_WVIEWCTL,__func__,"list of callbacks is empty");
+		DBGRET_SUCCESS(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"freeing %u callbacks from draw callback list",cbcount);
+
+	wvdrawcb_t *drawcbt_ptr;
+	jmlist_index cbcount_org = cbcount-1;
+	while( cbcount-- )
+	{
+		jmls = jmlist_pop(draw_cbl,(void*)&drawcbt_ptr);
+	
+		if( jmls != JMLIST_ERROR_SUCCESS )
+	   	{
+			dbgprint(MOD_WVIEWCTL,__func__,"unable to pop draw list entry");
+			if( cbcount_org != cbcount )
+				dbgprint(MOD_WVIEWCTL,__func__,"warning!! draw callback list was partially freed");
+			DBGRET_FAILURE(MOD_WVIEWCTL);
+		}
+	
+		dbgprint(MOD_WVIEWCTL,__func__,"calling wvctl_free_draw_cb(drawcbt=%p)",drawcbt_ptr);
+		ws = wvctl_free_draw_cb(drawcbt_ptr);
+		dbgprint(MOD_WVIEWCTL,__func__,"wvctl_free_draw_cb returned with ws=%u",ws);
+	
+		if( ws != WSTATUS_SUCCESS ) 
+		{
+			dbgprint(MOD_WVIEWCTL,__func__,"wvctl_free_draw_cb failed");
+			if( cbcount_org != cbcount )
+				dbgprint(MOD_WVIEWCTL,__func__,"warning!! draw callback list was partially freed");
+			DBGRET_FAILURE(MOD_WVIEWCTL);
+		}
+
+		/* continue to the next callback entry.. */
+	}
+
+	/* check if the entry count is zero now. */
+	jmls = jmlist_entry_count(draw_cbl,&cbcount);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		/* something went wrong with getting entry count! */
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to get number of callback entries in draw callback list (after free loop)");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	/* still have entries... means some other thread is adding entries to the list
+	and the code is broken because its not verifying that we're unloading the module! */
+	if( cbcount ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"after free loop there are still entries in the list, is *anyone* adding entries to the list?");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	/* all entries removed successfully. */
+	dbgprint(MOD_WVIEWCTL,__func__,"all draw callback list entries were freed successfully");
+	DBGRET_SUCCESS(MOD_WVIEWCTL);
+}
+
+/*
+   wvctl_free_draw_cbl_lock
+
+   Internal helper function to free draw callback list lock.
+*/
+wstatus
+wvctl_free_draw_cbl_lock(void)
+{
+	dbgprint(MOD_WVIEWCTL,__func__,"called");
+
+	dbgprint(MOD_WVIEWCTL,__func__,"freeing draw callback list lock");
+
+	if( wlock_free(&draw_cbl_lock) != WSTATUS_SUCCESS ) {
+		/* something went wrong with the free, program should abort ASAP.. */
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to free draw callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"draw callback list lock was freed successfully");
+	DBGRET_SUCCESS(MOD_WVIEWCTL);
+}
+
+wstatus
+wvctl_draw_routine(wvdraw_t draw,void *param)
+{
+	wstatus ws;
+	jmlist_status jmls;
+	wvdrawcb_t *drawcbt_ptr;
+
+	dbgprint(MOD_WVIEWCTL,__func__,"called with draw.flags=%d",draw.flags);
+
+	if( !wvctl_loaded ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unexpected call to this function, module not loaded yet");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( wvctl_unloading ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"module is unloading, ignoring this call");
+		DBGRET_SUCCESS(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"acquiring draw callback list lock");
+	ws = wlock_acquire(&draw_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to acquire draw callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	/* now that we've the lock, parse the drawbaord callback list */
+	
+	jmlist_index entry_count;
+
+	jmls = jmlist_entry_count(draw_cbl,&entry_count);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to get draw callback list entry count!");
+		goto free_lock_fail;
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"draw callback list has %u entries now",entry_count);
+	
+	for( jmlist_index i = 0 ; i < entry_count ; i++ )
+	{
+		jmls = jmlist_get_by_index(draw_cbl,i,(void*)&drawcbt_ptr);
+		if( jmls != JMLIST_ERROR_SUCCESS ) {
+			dbgprint(MOD_WVIEWCTL,__func__,"unable to get draw callback list entry #%u",i);
+			goto free_lock_fail;
+		}
+
+		/* call the client routine */
+		dbgprint(MOD_WVIEWCTL,__func__,"calling draw client routine %p (index %u, param=%p)",
+				drawcbt_ptr->cb,i,drawcbt_ptr->param);
+		drawcbt_ptr->cb(draw,drawcbt_ptr->param);
+		dbgprint(MOD_WVIEWCTL,__func__,"draw client routine returned");
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"all draw callbacks called, freeing lock");
+	ws = wlock_release(&draw_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release draw callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"draw lock released successfully");
+	DBGRET_SUCCESS(MOD_WVIEWCTL);
+
+free_lock_fail:
+	wlock_release(&draw_cbl_lock);
+	DBGRET_FAILURE(MOD_WVIEWCTL);
+}
+
+/*
+   iwvctl_find_drawcb
+
+   Internal callback to be used with jmlist to find a specific draw
+   callback in the callback list.
+*/
+jmlist_status
+iwvctl_find_drawcb(void *ptr,void *param,jmlist_lookup_result *result)
+{
+	wvdrawcb_t *drawcbt_ptr;
+	wvdraw_cb drawcb;
+
+	/* initialize variables */
+	drawcbt_ptr = (wvdrawcb_t*)ptr;
+	memcpy(&drawcb,param,sizeof(wvdraw_cb));
+
+	if( drawcbt_ptr->cb == drawcb )
+		*result = jmlist_entry_found;
+	else
+		*result = jmlist_entry_not_found;
+
+	return JMLIST_ERROR_SUCCESS;
+}
+
+/*
+   wvctl_register_draw_cb
+
+   First check if the module is unloading, if so, return with error since
+   no callback should be registered in that state.
+
+   Then, try to acquire the lock on draw callback list so exclusive
+   access is granted. A lookup for existent entries with same drawcb must
+   be done in order to avoid duplicate entries in the list.
+   
+   If there is no entry with same drawcb in the list, add the draw
+   callback to the list.
+
+   Finally free the draw list lock.
+*/
+wstatus
+wvctl_register_draw_cb(wvdraw_cb drawcb,void *param)
+{
+	wstatus ws;
+	jmlist_status jmls;
+	void *drawcb_cpy;
+	wvdrawcb_t *new_drawcbt;
+
+	memcpy((void*)&drawcb_cpy,(void*)&drawcb,sizeof(wvdraw_cb));
+
+	dbgprint(MOD_WVIEWCTL,__func__,"called with drawcb=%p and param=%p",drawcb,param);
+
+	if( wvctl_unloading ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"module is unloading, cannot register draw callback now");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( !wvctl_loaded ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"cannot use this function while the module was not loaded yet");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"acquiring draw callback list lock");
+	ws = wlock_acquire(&draw_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to acquire draw callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"looking up if callback drawcb=%p exists in the list",drawcb);
+	jmlist_lookup_result lookup_result;
+	jmls = jmlist_find(draw_cbl,iwvctl_find_drawcb,drawcb_cpy,&lookup_result,0);
+	if( jmls != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_find failed");
+		goto release_and_fail;
+	}
+	
+	if( lookup_result == jmlist_entry_found ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"callback with drawcb=%p already exists in the list",drawcb);
+		goto release_and_fail;
+	}
+
+	new_drawcbt = (wvdrawcb_t*)malloc(sizeof(wvdrawcb_t));
+	if( !new_drawcbt ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"malloc failed");
+		goto release_and_fail;
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"allocated new draw callback structure (new_drawcbt=%p)",new_drawcbt);
+
+	new_drawcbt->cb = drawcb;
+	new_drawcbt->param = param;
+
+	dbgprint(MOD_WVIEWCTL,__func__,"filled new structure with cb=%p and param=%p",
+			new_drawcbt->cb,new_drawcbt->param);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"adding draw callback structure to the list");
+	jmls = jmlist_insert(draw_cbl,new_drawcbt);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing draw callback list lock");
+	ws = wlock_release(&draw_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to add draw callback to the list");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"draw lock released successfully");
+	DBGRET_SUCCESS(MOD_WVIEWCTL);
+
+release_and_fail:
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing draw callback list lock");
+	ws = wlock_release(&draw_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release lock");
+	}
+	DBGRET_FAILURE(MOD_WVIEWCTL);
+}
+
+/*
+   wvctl_unregister_draw_cb
+
+   First it should check if wvctl module is unloading, if it is, ignore the call
+   returning with failure. Then, acquire the draw callback list lock, so
+   it can access to the draw list and remove the specific callback. Callbacks
+   are identified only by the function address (drawcb) so there shouldn't exist
+   two callbacks inside the callback list with the same value (this should be
+   checked in wvctl_register_draw_cb function when registering the callback).
+   After acquiring the callback list lock, the first thing it does is to lookup
+   for the entry in the callback list, if its not found report and return with
+   failure, otherwise proceed to the removal of the entry in the list.
+
+   Finally free the callback list lock.
+
+*/
+wstatus
+wvctl_unregister_draw_cb(wvdraw_cb drawcb)
+{
+	jmlist_status jmls;
+	wstatus ws;
+	void *drawcb_cpy;
+	wvdrawcb_t *drawcbt_ptr;
+
+	dbgprint(MOD_WVIEWCTL,__func__,"called with drawcb=%p",drawcb);
+
+	/* workaround for ISO C unsupport of void* to function pointer conversion,
+	this will only work if sizeof(void*) == sizeof(wvdraw_cb) */
+	memcpy((void*)&drawcb_cpy,(void*)&drawcb,sizeof(wvdraw_cb));
+
+	if( wvctl_unloading ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"module is unloading, cannot unregister draw callback now");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( !wvctl_loaded ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"cannot use this function while the module was not loaded yet");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"acquiring draw callback list lock");
+	ws = wlock_acquire(&draw_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"unable to acquire draw callback list lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"looking up if callback drawcb=%p exists in the list",drawcb);
+	jmlist_lookup_result lookup_result;
+	jmls = jmlist_find(draw_cbl,iwvctl_find_drawcb,drawcb_cpy,&lookup_result,(void*)&drawcbt_ptr);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"jmlist_ptr_exists failed");
+		goto release_and_fail;
+	}
+
+	if( lookup_result == jmlist_entry_not_found ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"the entry drawcb=%p is not in the callback list",drawcb);
+		goto release_and_fail;
+	}
+
+	jmls = jmlist_remove_by_ptr(draw_cbl,drawcbt_ptr);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing draw callback list lock");
+	ws = wlock_release(&draw_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release lock");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to remove draw callback to the list");
+		DBGRET_FAILURE(MOD_WVIEWCTL);
+	}
+
+	dbgprint(MOD_WVIEWCTL,__func__,"removed draw callback from the list successfully");
+
+	free(drawcbt_ptr);
+	dbgprint(MOD_WVIEWCTL,__func__,"freed draw callback structure memory");
+
+	DBGRET_SUCCESS(MOD_WVIEWCTL);
+
+release_and_fail:
+	dbgprint(MOD_WVIEWCTL,__func__,"releasing draw callback list lock");
+	ws = wlock_release(&draw_cbl_lock);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WVIEWCTL,__func__,"failed to release lock");
+	}
+	DBGRET_FAILURE(MOD_WVIEWCTL);
+}

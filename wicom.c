@@ -33,7 +33,28 @@
 #include "wview.h"
 
 wstatus
-draw_routine(wvdraw_t draw)
+draw_routine2(wvdraw_t draw,void *param)
+{
+	shape_t s;
+	memset(&s,0,sizeof(s));
+
+	if( draw.flags & WVDRAW_FLAG_ORTHOGONAL )
+	{
+		s.type = SHAPE_TEXT;
+		s.data.text.content = "XPTO IN ORTHO!";
+		s.data.text.position.x = 200.0;
+		s.data.text.position.y = 200.0;
+		s.data.text.position.z = 0;
+		s.data.text.font = TEXT_FONT_SMALL;
+		V3_SET(s.data.text.color,0,0,1);
+		wview_draw_shape(s);
+	}
+
+	return WSTATUS_SUCCESS;
+}
+
+wstatus
+draw_routine(wvdraw_t draw,void *param)
 {
 	shape_t s;
 	memset(&s,0,sizeof(s));
@@ -124,6 +145,7 @@ keyboard_routine(wvkey_t key,wvkey_mode_t key_mode,void *param)
 wstatus POSH_CDECL
 mouse_routine(wvmouse_t mouse,void *param)
 {
+	printf("mouse used: button %d (param=%p)\n",mouse.button,param); /*TODO*/
 	return WSTATUS_SUCCESS;
 }
 
@@ -140,8 +162,10 @@ int main(int argc,char *argv[])
 
 	printf("wviewctl_load returned..");
 
-	wvctl_register_mouse_cb(mouse_routine,0);
-	wvctl_register_keyboard_cb(keyboard_routine,0);
+	wvctl_register_mouse_cb(mouse_routine,(void*)123);
+	wvctl_register_keyboard_cb(keyboard_routine,(void*)123);
+	wvctl_register_draw_cb(draw_routine,(void*)456);
+	wvctl_register_draw_cb(draw_routine2,(void*)456);
 
 	fgets(buffer,sizeof(buffer),stdin);
 
