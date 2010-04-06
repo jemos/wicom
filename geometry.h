@@ -55,6 +55,7 @@ typedef struct _v4u_t {
 #define V3_SET(v,x1,x2,x3) v.x=x1; v.y=x2; v.z=x3;
 #define V4_SET(v,x1,x2,x3,x4) v.x=x1; v.y=x2; v.z=x3; v.t=x4;
 
+#define V2DPRINTF "(%0.2g,%0.2g)"
 #define V3DPRINTF "(%0.2g,%0.2g,%0.2g)"
 #define V4DPRINTF "(%0.2g,%0.2g,%0.2g,%0.2g)"
 
