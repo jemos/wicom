@@ -367,6 +367,8 @@ free_all:
 		wvctl_free_keyboard_cbl_lock();
 		wvctl_free_mouse_cbl();
 		wvctl_free_mouse_cbl_lock();
+		wvctl_free_draw_cbl();
+		wvctl_free_draw_cbl_lock();
 		exit_routine = 0; /* cleanup the exit routine */
 		DBGRET_FAILURE(MOD_WVIEWCTL);
 	}
