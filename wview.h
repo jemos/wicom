@@ -59,6 +59,7 @@ typedef struct _wview_window_t
 	wvdraw_cb draw_routine;
 	wvkeyboard_cb keyboard_routine;
 	wvmouse_cb mouse_routine;
+	wvclosewnd_cb closewnd_routine;
 } wview_window_t;
 
 typedef enum _wview_mode_t

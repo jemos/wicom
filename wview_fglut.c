@@ -53,6 +53,7 @@ References:
 static wvkeyboard_cb cltkeyboard_cb = 0;
 static wvmouse_cb cltmouse_cb = 0;
 static wvdraw_cb cltdraw_cb = 0;
+static wvclosewnd_cb cltclosewnd_cb = 0;
 
 /* window identifier */
 static int window_id = 0;
@@ -79,6 +80,7 @@ void wview_keyboard_func(unsigned char key, int x, int y);
 void wview_reshape_func(int width,int height);
 void close_func(void);
 void wview_display_func(void);
+void wview_close_func(void);
 
 /*
    wview_load
@@ -191,6 +193,9 @@ wview_create_window(wview_window_t window)
 	cltmouse_cb = window.mouse_routine;
 	dbgprint(MOD_WVIEW,__func__,"Set client mouse routine pointer to %p",window.mouse_routine);
 
+	cltclosewnd_cb = window.closewnd_routine;
+	dbgprint(MOD_WVIEW,__func__,"Set client close window routine pointer to %p",window.closewnd_routine);
+
 	/* set window size before creating it */
 	dbgprint(MOD_WVIEW,__func__,"Setting window size to %u x %u",window.width,window.height);
 	win_width = window.width;
@@ -226,6 +231,7 @@ wview_create_window(wview_window_t window)
 	glutReshapeFunc(wview_reshape_func);
 	glutMouseFunc(wview_mouse_func);
 	glutKeyboardFunc(wview_keyboard_func);
+	glutCloseFunc(wview_close_func);
 
 	dbgprint(MOD_WVIEW,__func__,"Returning with success.");
 	return WSTATUS_SUCCESS;
@@ -890,5 +896,52 @@ wview_set(wview_option_t option,void *value_ptr,unsigned int value_size)
 	}
 
 	DBGRET_SUCCESS(MOD_WVIEW)
+}
+
+/*
+   wview_close_func
+
+   Function called by GLUT when the user presses close button of the window.
+   This function should call client defined routine for close window, this
+   routine accepts a pointer to bool (ignore flag) if set to true, wview will
+   not destroy the window, if set to false wview will destroy the window.
+   By default wview will destroy the window.
+*/
+void wview_close_func(void)
+{
+	bool ignore = false;
+	wstatus ws;
+
+	dbgprint(MOD_WVIEW,__func__,"called");
+
+	if( !cltclosewnd_cb ) {
+		dbgprint(MOD_WVIEW,__func__,"close window routine pointer not set, not calling any routine");
+	} else
+	{
+		dbgprint(MOD_WVIEW,__func__,"calling client close window routine (%p)",cltclosewnd_cb);
+		cltclosewnd_cb(&ignore);
+		dbgprint(MOD_WVIEW,__func__,"client close window routine returned ignore=%u",ignore);
+	}
+
+	if( !ignore )
+	{
+		ws = wview_destroy_window();
+		if( ws != WSTATUS_SUCCESS ) {
+			dbgprint(MOD_WVIEW,__func__,"failed to destroy window");
+			goto fim;
+		}
+
+		ws = wview_process(WVIEW_ASYNCHRONOUS);
+		if( ws != WSTATUS_SUCCESS ) {
+			dbgprint(MOD_WVIEW,__func__,"wview_process failed");
+			goto fim;
+		}
+	} else
+	{
+		dbgprint(MOD_WVIEW,__func__,"ignoring window close event");
+	}
+
+fim:
+	dbgprint(MOD_WVIEW,__func__,"returning.");
 }
 
