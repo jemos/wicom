@@ -50,6 +50,8 @@ wview_create_window()
 	   mode. The client code then should call 
    - mouse_input_cb
    - keyboard_input_cb
+   - closewnd_cb called whenever the window is closed by the
+     user, this is not mandatory.
 
   OpenGL: use glutCreateWindow, call 
   WinGDI: CreateClassEx, CreateWindowEx ...

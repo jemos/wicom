@@ -61,4 +61,34 @@ closes the window? there should exist a special callback passed
 in wviewctl initialization structure which should be called
 whenever this happens.
 
+ISSUE #2: how the client may send special requests to wview
+using wviewctl or contacting wview directly?
+
+ No code should contact wview directly because wviewctl was
+ coded in a way that only a single thread accesses wview module.
+ 
+ Taking this in account at first sight the solution is to
+ have a request queue in wviewctl which will process them
+ using the thread that contacts with wview (working_thread).
+ Then, the working_thread must not block (should not call wview
+ process routine synchrously).
+
+ With the asynchronous access to wview, how will wviewctl
+ detect when the window was closed??
+  S: glutCloseFunc allows to register a callback function that
+     is called whenever the window is closed.
+
+ Inside the working thread of wviewctl it should call wview
+ process routine asynchrously and check for a flag that
+ gives information of window status (closed or not). If the
+ window was closed, the close routine is called and the
+ flag is set. Inside the working thread then, procedures
+ should be done as it was done when the window was closed.
+
+ A new field was added to create window structure, in wview,
+ this is closewnd_cb which is a callback called whenever the
+ window close button is clicked. wviewctl should set this
+ field to an internal routine which will set window_closed
+ flag active inside wviewctl. That will break the main loop
+ of working thread.
 
