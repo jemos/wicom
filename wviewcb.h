@@ -4,6 +4,7 @@
 
 #include "posh.h"
 #include "wstatus.h"
+#include <stdbool.h>
 
 typedef struct _wvkey_t
 {

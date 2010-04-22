@@ -32,6 +32,8 @@
 #include "wviewctl.h"
 #include "wview.h"
 
+double vtest = 50.0;
+
 wstatus
 draw_routine2(wvdraw_t draw,void *param)
 {
@@ -93,7 +95,7 @@ draw_routine(wvdraw_t draw,void *param)
 
 		s.type = SHAPE_TEXT;
 		s.data.text.content = "XPTO IN ORTHO!";
-		s.data.text.position.x = 50.0;
+		s.data.text.position.x = vtest;
 		s.data.text.position.y = 50.0;
 		s.data.text.position.z = 0;
 		s.data.text.font = TEXT_FONT_SMALL;
@@ -139,6 +141,11 @@ wstatus POSH_CDECL
 keyboard_routine(wvkey_t key,wvkey_mode_t key_mode,void *param)
 {
 	printf("key pressed: <%02X>\n",key.key);
+	
+	vtest += 10.0;
+
+	wvctl_redraw();
+
 	return WSTATUS_SUCCESS;
 }
 

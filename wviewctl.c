@@ -46,6 +46,8 @@ static wlock_t draw_cbl_lock;
 
 static bool wvctl_loaded = false;
 static bool wvctl_unloading = false;
+static bool wvctl_closed = false;
+static bool wvctl_redraw_flag = false;
 
 static wvctl_exit_routine_cb exit_routine = 0;
 static wthread_t worker_thread;
@@ -69,6 +71,7 @@ static void wvctl_worker_routine(void *param);
 static wstatus wvctl_keyboard_routine(wvkey_t key,wvkey_mode_t key_mode,void *param);
 static wstatus wvctl_mouse_routine(wvmouse_t mouse,void *param);
 static wstatus wvctl_draw_routine(wvdraw_t draw,void *param);
+static wstatus wvctl_closewnd_routine(bool *ignore);
 
 static jmlist_status iwvctl_find_keycb(void *ptr,void *param,jmlist_lookup_result *result);
 static jmlist_status iwvctl_find_mousecb(void *ptr,void *param,jmlist_lookup_result *result);
@@ -435,6 +438,7 @@ wvctl_worker_routine(void *param)
 	window.keyboard_routine = wvctl_keyboard_routine;
 	window.mouse_routine = wvctl_mouse_routine;
 	window.draw_routine = wvctl_draw_routine;
+	window.closewnd_routine = wvctl_closewnd_routine;
 	ws = wview_create_window(window);
 	if( ws != WSTATUS_SUCCESS ) {
 		dbgprint(MOD_WVIEWCTL,__func__,"unable to create window for wview");
@@ -450,12 +454,23 @@ wvctl_worker_routine(void *param)
 	tis->init_finished_status = WSTATUS_SUCCESS;
 	tis->init_finished_flag = true;
 
-	/* window was created successfully, pass the CPU to the main loop */
-	ws = wview_process(WVIEW_SYNCHRONOUS);
-	if( ws != WSTATUS_SUCCESS ) {
-		dbgprint(MOD_WVIEWCTL,__func__,"wview_process failed");
-		dbgprint(MOD_WVIEWCTL,__func__,"Returning with no status.");
-		return;
+	/* main loop */
+	while( !wvctl_closed )
+	{
+		/* window was created successfully, pass the CPU to the main loop */
+		ws = wview_process(WVIEW_ASYNCHRONOUS);
+		if( ws != WSTATUS_SUCCESS ) {
+			dbgprint(MOD_WVIEWCTL,__func__,"wview_process failed");
+			dbgprint(MOD_WVIEWCTL,__func__,"Returning with no status.");
+			return;
+		}
+
+		sleep(0.5);
+
+		if( wvctl_redraw_flag ) {
+			wview_redraw();
+			wvctl_redraw_flag = false;
+		}
 	}
 
 	/* call client exit routine if any was set */
@@ -470,10 +485,17 @@ wvctl_worker_routine(void *param)
 	}
 
 	/* user has closed the window, cleanup and leave with success. */
-	dbgprint(MOD_WVIEWCTL,__func__,"destroying the wview window");
-	ws = wview_destroy_window();
+//	dbgprint(MOD_WVIEWCTL,__func__,"destroying the wview window");
+//	ws = wview_destroy_window();
+//	if( ws != WSTATUS_SUCCESS ) {
+//		dbgprint(MOD_WVIEWCTL,__func__,"unable to destroy wview window");
+//		dbgprint(MOD_WVIEWCTL,__func__,"Returning with no status.");
+//		return;
+//	}
+
+	ws = wview_process(WVIEW_ASYNCHRONOUS);
 	if( ws != WSTATUS_SUCCESS ) {
-		dbgprint(MOD_WVIEWCTL,__func__,"unable to destroy wview window");
+		dbgprint(MOD_WVIEWCTL,__func__,"wview_process failed");
 		dbgprint(MOD_WVIEWCTL,__func__,"Returning with no status.");
 		return;
 	}
@@ -1100,6 +1122,11 @@ release_and_fail:
 wstatus
 wvctl_redraw(void)
 {
+	dbgprint(MOD_WVIEWCTL,__func__,"called");
+
+	wvctl_redraw_flag = true;
+	dbgprint(MOD_WVIEWCTL,__func__,"redraw flag set to %u",wvctl_redraw_flag);
+
 	DBGRET_SUCCESS(MOD_WVIEWCTL);
 }
 
@@ -1502,3 +1529,23 @@ release_and_fail:
 	}
 	DBGRET_FAILURE(MOD_WVIEWCTL);
 }
+
+/*
+   wvctl_closewnd_routine
+
+   Callback function called by wview when the window is closed.
+*/
+wstatus wvctl_closewnd_routine(bool *ignore)
+{
+	dbgprint(MOD_WVIEWCTL,__func__,"called with ignore=%p",ignore);
+
+	dbgprint(MOD_WVIEWCTL,__func__,"setting ignore flag to false");
+	*ignore = true;
+	dbgprint(MOD_WVIEWCTL,__func__,"ignore flag set to %u",*ignore);
+
+	wvctl_closed = true;
+	wvctl_unloading = true;
+
+	DBGRET_SUCCESS(MOD_WVIEWCTL);
+}
+
