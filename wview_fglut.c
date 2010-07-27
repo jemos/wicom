@@ -568,7 +568,7 @@ draw_point(shape_t shape)
 			shape.data.point.color.y,
 			shape.data.point.color.z );
 
-	dbgprint(MOD_WVIEW,__func__,"point color is (%0.2g,%0.2g,%0.2g) location is (%0.2g,%0.2g,%0.2g)",
+	dbgprint(MOD_WVIEW,__func__,"point color is (%0.2lf,%0.2lf,%0.2lf) location is (%0.2lf,%0.2lf,%0.2lf)",
 			shape.data.point.color.x,
 			shape.data.point.color.y,
 			shape.data.point.color.z,
@@ -600,7 +600,7 @@ draw_line(shape_t shape)
 			shape.data.line.color.y,
 			shape.data.line.color.z);
 
-	dbgprint(MOD_WVIEW,__func__,"line color is (%0.2g,%0.2g,%0.2g) vertexes are (%0.2g,%0.2g,%0.2g) to (%0.2g,%0.2g,%0.2g)",
+	dbgprint(MOD_WVIEW,__func__,"line color is (%0.2lf,%0.2lf,%0.2lf) vertexes are (%0.2lf,%0.2lf,%0.2lf) to (%0.2lf,%0.2lf,%0.2lf)",
 			shape.data.line.color.x,shape.data.line.color.y,shape.data.line.color.z,
 			shape.data.line.p1.x,shape.data.line.p1.y,shape.data.line.p1.z,
 			shape.data.line.p2.x,shape.data.line.p2.y,shape.data.line.p2.z );
@@ -632,7 +632,7 @@ draw_polyline(shape_t shape)
 			shape.data.polyline.color.y,
 			shape.data.polyline.color.z);
 
-	dbgprint(MOD_WVIEW,__func__,"line color is (%0.2g,%0.2g,%0.2g)");
+	dbgprint(MOD_WVIEW,__func__,"line color is (%0.2lf,%0.2lf,%0.2lf)");
 
 	dbgprint(MOD_WVIEW,__func__,"inserting %u vertexes",shape.data.polyline.point_count);
 
@@ -640,7 +640,7 @@ draw_polyline(shape_t shape)
 	glBegin(GL_LINE_STRIP);
 	for( unsigned int i = 0 ; i < shape.data.polyline.point_count ; i++ )
 	{
-		dbgprint(MOD_WVIEW,__func__,"vertex #%u is at (%0.2g,%0.2g,%0.2g)",i,
+		dbgprint(MOD_WVIEW,__func__,"vertex #%u is at (%0.2lf,%0.2lf,%0.2lf)",i,
 				shape.data.polyline.point_list[i].x,
 				shape.data.polyline.point_list[i].y,
 				shape.data.polyline.point_list[i].z );
@@ -665,7 +665,7 @@ draw_polygon(shape_t shape)
 			shape.data.polygon.color.y,
 			shape.data.polygon.color.z );
 
-	dbgprint(MOD_WVIEW,__func__,"polygon color is (%0.2g, %0.2g, %0.2g)");
+	dbgprint(MOD_WVIEW,__func__,"polygon color is (%0.2lf, %0.2lf, %0.2lf)");
 
 	dbgprint(MOD_WVIEW,__func__,"inserting %u vertexes",shape.data.polygon.point_count);
 
@@ -673,7 +673,7 @@ draw_polygon(shape_t shape)
 	glBegin(GL_POLYGON);
 	for( unsigned int i = 0 ; i < shape.data.polygon.point_count ; i++ )
 	{
-		dbgprint(MOD_WVIEW,__func__,"vertex #%u is at (%0.2g,%0.2g,%0.2g)",i,
+		dbgprint(MOD_WVIEW,__func__,"vertex #%u is at (%0.2lf,%0.2lf,%0.2lf)",i,
 				shape.data.polygon.point_list[i].x,
 				shape.data.polygon.point_list[i].y,
 				shape.data.polygon.point_list[i].z );

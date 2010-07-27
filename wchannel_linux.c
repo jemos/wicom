@@ -86,9 +86,6 @@ _wchannel_free_entry(wchannel_t channel)
 				dbgprint(MOD_WCHANNEL,__func__,"(channel=%p) failed to free this channel",channel);
 				goto return_fail;
 			}
-
-			dbgprint(MOD_WCHANNEL,__func__,"(channel=%p) freeing channel structure",channel);
-			free(channel);
 			break;
 		case WCHANNEL_TYPE_SOCKTCP:
 		case WCHANNEL_TYPE_PIPE:
@@ -97,6 +94,9 @@ _wchannel_free_entry(wchannel_t channel)
 			dbgprint(MOD_WCHANNEL,__func__,"(channel=%p) invalid or unsupported channel type");
 			goto return_fail;
 	}
+
+	dbgprint(MOD_WCHANNEL,__func__,"(channel=%p) freeing channel structure",channel);
+	free(channel);
 
 	dbgprint(MOD_WCHANNEL,__func__,"(channel=%p) returning with success.",channel);
 	return WSTATUS_SUCCESS;

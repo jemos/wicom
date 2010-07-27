@@ -27,6 +27,8 @@
 
 typedef unsigned int shapeid_t;
 
+#define MAX_SHAPE_TAG_SIZE 128
+
 typedef struct _shape_point_t {
 	v3d_t p1;
 	v1d_t size;
@@ -78,6 +80,7 @@ typedef enum _shapevisibility_t {
 typedef struct _shape_t {
 	layer_t layer;
 	plantid_t plantid;
+	char shapetag[MAX_SHAPE_TAG_SIZE];
 	shapetype_t type;
 	shapevisibility_t visibility;
 	union {
