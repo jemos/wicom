@@ -87,7 +87,7 @@ typedef struct _wchannel_load_t
 	void *junk;
 } wchannel_load_t;
 
-typedef wstatus (*WCHANNELDUMPCB)(void *buffer_ptr,unsigned int buffer_size, unsigned int buffer_used);
+typedef wstatus (*WCHANNELDUMPCB)(char *dest,void *msg_ptr,unsigned int msg_size, unsigned int msg_used);
 
 /* channel options */
 typedef struct _wchannel_opt_t
@@ -105,8 +105,8 @@ typedef struct _wchannel_opt_t
 typedef struct _wchannel_t *wchannel_t;
 
 wstatus wchannel_create(wchannel_opt_t *chan_opt,wchannel_t *channel);
-wstatus wchannel_send(wchannel_t channel,void *buffer_ptr,unsigned int buffer_size,char *dest,unsigned int *buffer_used);
-wstatus wchannel_receive(wchannel_t channel,void *buffer_ptr,unsigned int buffer_size,unsigned int *buffer_used);
+wstatus wchannel_send(wchannel_t channel,char *dest,void *msg_ptr,unsigned int msg_size,unsigned int *msg_used);
+wstatus wchannel_receive(wchannel_t channel,void *msg_ptr,unsigned int msg_size,unsigned int *msg_used);
 wstatus wchannel_destroy(wchannel_t channel);
 
 #endif
