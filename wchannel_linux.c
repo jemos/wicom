@@ -187,14 +187,35 @@ _wchannel_udp_create(wchannel_opt_t *chan_opt,wchannel_t *channel)
 
 	for (rp = result; rp != NULL; rp = rp->ai_next)
 	{
+		sock = 0;
+
 		sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 		if( sock < 0 )
 			continue;
 
+		dbgprint(MOD_WCHANNEL,__func__,"socket created successfully (sock=%d)",sock);
+
+		psin = (struct sockaddr_in*)rp->ai_addr;
+		dbgprint(MOD_WCHANNEL,__func__,"binding of the socket to host=%s and port=%d",
+				inet_ntoa(psin->sin_addr),htons(psin->sin_port));
+		ecode = bind(sock,rp->ai_addr,rp->ai_addrlen);
+		if( ecode < 0 ) {
+			/* this might happen if for example the port is already taken by other pid */
+			dbgprint(MOD_WCHANNEL,__func__,"bind of socket failed (host=%s, port=%d) trying next addr",
+					inet_ntoa(psin->sin_addr),htons(psin->sin_port));
+			close(sock);
+			continue;
+		}
+
+		dbgprint(MOD_WCHANNEL,__func__,"bind to host=%s and port=%d was successful",
+			inet_ntoa(psin->sin_addr),htons(psin->sin_port));
 		/* socket created successfuly */
 		freeaddrinfo(result);
-		goto sock_created;
+		goto bind_ok;
 	}
+
+	if( sock )
+		close(sock);
 
 	freeaddrinfo(result);
 	dbgprint(MOD_WCHANNEL,__func__,"unable to find a valid bind address (host_src=%s, port_src=%s)",
@@ -202,21 +223,7 @@ _wchannel_udp_create(wchannel_opt_t *chan_opt,wchannel_t *channel)
 		   (chan_opt->port_src ? chan_opt->port_src : "NULL") );
 	goto return_fail_early;
 
-sock_created:
-	dbgprint(MOD_WCHANNEL,__func__,"socket created successfully (sock=%d)",sock);
-
-	psin = (struct sockaddr_in*)rp->ai_addr;
-	dbgprint(MOD_WCHANNEL,__func__,"binding of the socket to host=%s and port=%d",
-			inet_ntoa(psin->sin_addr),htons(psin->sin_port));
-	ecode = bind(sock,rp->ai_addr,rp->ai_addrlen);
-	if( ecode < 0 ) {
-		/* this might happen if for example the port is already taken by other pid */
-		dbgprint(MOD_WCHANNEL,__func__,"bind of socket failed (host=%s, port=%d)",
-				inet_ntoa(psin->sin_addr),htons(psin->sin_port));
-		goto return_fail_sock;
-	}
-	dbgprint(MOD_WCHANNEL,__func__,"bind to host=%s and port=%d was successful",
-			inet_ntoa(psin->sin_addr),htons(psin->sin_port));
+bind_ok:
 
 	/* allocate new channel_t structure to store in internal channel list */
 	dbgprint(MOD_WCHANNEL,__func__,"allocating memory for new channel_t struct");
@@ -237,7 +244,6 @@ sock_created:
 	dbgprint(MOD_WCHANNEL,__func__,"returning with success.");
 	return WSTATUS_SUCCESS;
 
-return_fail_sock:
 	dbgprint(MOD_WCHANNEL,__func__,"closing socket %d",sock);
 	close(sock);
 
@@ -828,10 +834,13 @@ return_fail:
 }
 
 wstatus
-wchannel_receive(wchannel_t channel,void *buffer_ptr,unsigned int buffer_size,unsigned int *buffer_used)
+wchannel_receive(wchannel_t channel,void *msg_ptr,unsigned int msg_size,unsigned int *msg_used)
 {
-	dbgprint(MOD_WCHANNEL,__func__,"called with channel=%p, buffer_ptr=%p, buffer_size=%u, buffer_used=%p",
-			channel,buffer_ptr,buffer_size,buffer_used);
+	wstatus ws;
+	unsigned int bytes_sent;
+
+	dbgprint(MOD_WCHANNEL,__func__,"called with channel=%p, msg_ptr=%p, msg_size=%u, msg_used=%p",
+			channel,msg_ptr,msg_size,msg_used);
 
 	if( !loaded ) {
 		dbgprint(MOD_WCHANNEL,__func__,"module was not loaded yet");
@@ -844,7 +853,100 @@ wchannel_receive(wchannel_t channel,void *buffer_ptr,unsigned int buffer_size,un
 		dbgprint(MOD_WCHANNEL,__func__,"returning with failure.");
 		return WSTATUS_FAILURE;
 	}
-	return WSTATUS_UNIMPLEMENTED;
+
+	if( !channel ) {
+		dbgprint(MOD_WCHANNEL,__func__,"missing channel argument (channel=0)");
+		goto return_fail;
+	}
+
+	if( !msg_ptr || !msg_size ) {
+		dbgprint(MOD_WCHANNEL,__func__,"missing message to send or message size is zero");
+		goto return_fail;
+	}
+
+	/* now ready to send */
+
+	switch(channel->chan_opt.type)
+	{
+		case WCHANNEL_TYPE_SOCKUDP:
+			dbgprint(MOD_WCHANNEL,__func__,"calling helper function wchannel_udp_recv");
+			ws = _wchannel_udp_recv(channel,msg_ptr,msg_size,&bytes_sent);
+			dbgprint(MOD_WCHANNEL,__func__,"helper function returned ws=%d",ws);
+			break;
+		case WCHANNEL_TYPE_SOCKTCP:
+		case WCHANNEL_TYPE_PIPE:
+		case WCHANNEL_TYPE_FIFO:
+		default:
+			dbgprint(MOD_WCHANNEL,__func__,"invalid or unsupported channel type %d "
+					"(check your channel pointer!)",channel->chan_opt.type);
+			goto return_fail;
+	}
+
+	/* check helper return value */
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_WCHANNEL,__func__,"failed to receive message");
+		goto return_fail;
+	}
+
+	/* update msg_used if its not null */
+	if( msg_used ) {
+		dbgprint(MOD_WCHANNEL,__func__,"updating msg_used argument with %u",bytes_sent);
+		*msg_used = bytes_sent;
+		dbgprint(MOD_WCHANNEL,__func__,"new msg_used value is %u",*msg_used);
+	}
+
+	/* handle the message history */
+	switch(channel->chan_opt.debug_opts)
+	{
+		case WCHANNEL_MESSAGE_BUFFER:
+		
+			/* insert message in message history of the channel */
+			dbgprint(MOD_WCHANNEL,__func__,"calling helper function msgbuf_insert with msgbuf=%p msgptr=%p msgsize=%u",
+					&channel->message_buffer,msg_ptr,msg_size);
+
+			ws = _msgbuf_insert(&channel->message_buffer,msg_ptr,msg_size);
+
+			if( ws != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_WCHANNEL,__func__,"msgbuf_insert failed (ws=%d)",ws);
+				goto return_semifail;
+			}
+
+			dbgprint(MOD_WCHANNEL,__func__,"added message to message history successfully");
+			break;
+
+		case WCHANNEL_DUMP_CALLBACK:
+			
+			/* call the user defined callback function */
+			if( !channel->chan_opt.dump_cb ) {
+				dbgprint(MOD_WCHANNEL,__func__,"debug opts = dump_cb but dump_cb=0");
+				goto return_semifail;
+			}
+
+			dbgprint(MOD_WCHANNEL,__func__,"calling dump_cb=%p with dest=NULL, msg_ptr=%p, msg_size=%u and msg_used=%u",
+					channel->chan_opt.dump_cb,msg_ptr,msg_size,bytes_sent);
+
+			channel->chan_opt.dump_cb(0,msg_ptr,msg_size,bytes_sent);
+
+			dbgprint(MOD_WCHANNEL,__func__,"dump_cb returned successfully");
+			break;
+
+		case WCHANNEL_NO_DEBUG:
+			dbgprint(MOD_WCHANNEL,__func__,"channel has debug off");
+			break;
+		default:
+			dbgprint(MOD_WCHANNEL,__func__,"invalid or unsupported debug option %d"
+					" (check your channel pointer!)",channel->chan_opt.debug_opts);
+			goto return_semifail;
+	}
+
+	DBGRET_SUCCESS(MOD_WCHANNEL);
+
+return_semifail:
+	dbgprint(MOD_WCHANNEL,__func__,"returning semifail.");
+	return WSTATUS_SEMIFAIL;
+
+return_fail:
+	DBGRET_FAILURE(MOD_WCHANNEL);
 }
 
 /*

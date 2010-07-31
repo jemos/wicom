@@ -108,6 +108,8 @@ wstatus wchannel_create(wchannel_opt_t *chan_opt,wchannel_t *channel);
 wstatus wchannel_send(wchannel_t channel,char *dest,void *msg_ptr,unsigned int msg_size,unsigned int *msg_used);
 wstatus wchannel_receive(wchannel_t channel,void *msg_ptr,unsigned int msg_size,unsigned int *msg_used);
 wstatus wchannel_destroy(wchannel_t channel);
+wstatus wchannel_load(wchannel_load_t load);
+wstatus wchannel_unload(void);
 
 #endif
 

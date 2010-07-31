@@ -31,6 +31,7 @@
 #include "debug.h"
 #include "wviewctl.h"
 #include "wview.h"
+#include "wchannel.h"
 
 double vtest = 50.0;
 
@@ -156,11 +157,53 @@ mouse_routine(wvmouse_t mouse,void *param)
 	return WSTATUS_SUCCESS;
 }
 
+void wchannel_test(void)
+{
+	wchannel_load_t load;
+	wstatus ws;
+	char buffer[64];
+	
+	ws = wchannel_load(load);
+	if( ws != WSTATUS_SUCCESS ) {
+		return;
+	}
+
+	wchannel_t wch;
+	wchannel_opt_t wch_opt = {
+		.type = WCHANNEL_TYPE_SOCKUDP,
+		.host_src = "localhost",
+		.port_src = "5000",
+		.debug_opts = WCHANNEL_NO_DEBUG
+	};
+
+	ws = wchannel_create(&wch_opt,&wch);
+	if( ws != WSTATUS_SUCCESS ) {
+		return;
+	}
+
+	unsigned int msg_used;
+	ws = wchannel_send(wch,"localhost 1234","HELLO",4,&msg_used);
+	if( ws != WSTATUS_SUCCESS ) {
+		goto return_wch;
+	}
+
+	ws = wchannel_receive(wch,buffer,sizeof(buffer),&msg_used);
+
+return_wch:
+	wchannel_destroy(wch);
+	wchannel_unload();
+	return;
+}
+
 int main(int argc,char *argv[])
 {
 	wstatus s;
 	wview_load_t load;
 	char buffer[32];
+
+	wchannel_test();
+
+	return EXIT_SUCCESS;
 
 	wvctl_load_t wvctl_l;
 	wvctl_l.exit_routine = 0;
