@@ -32,12 +32,14 @@ modname modname_list[] = {
 	{MOD_CONSOLE,"console"},
 	{MOD_MAPMGR,"mapmgr"},
 	{MOD_APMGR,"apmgr"},
-	{MOD_SCANMGR,"scanmgr"},
+	{MOD_MODMGR,"modmgr"},
 	{MOD_DEBUG,"debug"},
 	{MOD_WTHREAD,"wthread"},
 	{MOD_WLOCK,"wlock"},
 	{MOD_WVIEW,"wview"},
-	{MOD_WVIEWCTL,"wviewctl"}
+	{MOD_WVIEWCTL,"wviewctl"},
+	{MOD_SHAPEMGR,"shapemgr"},
+	{MOD_WCHANNEL,"wchannel"}
 };
 #define MOD_COUNT (sizeof(modname_list)/sizeof(modname))
 
