@@ -1,0 +1,58 @@
+wicom should feature a dynamic module system where the user
+can load and unload modules that enhance wicom with new 
+and different functionality.
+
+Taking in account that there are differences between windows
+and Linux, it will be needed two different implementations
+of the module manager code. Fortunatelly these don't differ
+much.
+
+Basicaly in Linux we use dlopen() and dlsym(), in Windows
+we use LoadLibrary and GetProcAddress.
+
+So the module manager will be named modmgr and will have
+one header file which is common to all implementations
+and different code files for each implementation.
+
+modmgr.h
+modmgr_linux.c
+modmgr_windows.c
+modmgr_macos.c
+...
+
+During compilation of wicom, it will be decided which
+code file should be used according to the OS platform.
+
+The module manager system is organized in a way which
+the server is wicom and the clients are the modules.
+
+The should be only one function to interact with the
+module used by wicom which is called module_request.
+
+module_request(code,request,reply)
+
+In the initialization procedure, the module is requested
+to load and can reply with failure.
+
+wicom might link the module but but not request to load.
+No module should load without explicit wicom request.
+This is to allow wicom to dlopen the module but only
+load it if there aren't any conflicts and dependencies
+to be solved.
+
+The module might be requested for information at any
+time, this information should include the module name,
+description and version at minimum.
+
+
+List of Possible Requests
+
+
+mod_module_information
+  gives module name, description and version.
+
+mod_module_dependency
+  gives list of other modules that this module depends
+  to work.
+
+mod_module_

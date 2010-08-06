@@ -1,0 +1,74 @@
+IMPLENTACAO DO MODMGR
+
+- Qualquer pedido enviado (request) com req.srcport, req.dstport deve ser respondido
+  com um request rep.srcport = req.dstport e rep.dstport = req.srcport.
+
+Panorama 1:
+ Servidor escuta no porto 10.0.0.1:1234, modulo remoto localizado no host 12.0.0.1
+ pretende-se registar no servidor com o nome de "mod1".
+
+   12.0.0.1:2345 UDP req-register(mod1,4567) -> 10.0.0.1:1234
+
+   Servidor recebe pacote UDP vindo do host 12.0.0.1:2345 indicando que o modulo mod1
+   se encontra nesse host e tem um porto aberto em 4567 para receber pedidos/respostas.
+
+   10.0.0.1:1234 UDP req-reply(OK) -> 12.0.0.1:2345
+
+   Servidor responde com reply OK, querendo dizer que mod1 foi registado com sucesso.
+   
+   10.0.0.1:5000 UDP req-info(xpto) -> 12.0.0.1:4567
+
+   Servidor enviou pedido de informação ao mod1 para a porta de requests deste.
+
+   12.0.0.1:4567 UDP req-reply(xpto) -> 10.0.0.1:5000
+
+   Resposta é enviada para a porta de onde veio o pacote.
+
+Panorama 2:
+ Servidor recebe um request dum modulo local para encaminhar para um modulo que detecta
+ ser remoto.
+
+   request(req-xpto,mod=modr1) -> 10.0.0.1.1234
+
+   Servidor recebe o pedido em binário, verifica pela lista de modulos carregados que
+   o modr1 se encontra no host p.ex. 12.0.0.1:2345 (em que 2345 é a porta que recebe
+   requests) e existe um socket UDP criado com porta local de 6000 para comunicar com
+   esse modr1.
+
+   10.0.0.1:6000 UDP req-xpto -> 12.0.0.1:2345
+
+   Host remoto recebe o pedido, processa-o e deve enviar uma resposta.
+
+   12.0.0.1:2345 UDP req-reply(OK) -> 10.0.0.1:6000
+
+   Servidor recebe a resposta, procura que pedidos e que aguardam na memória por
+   resposta, um que tenha o mesmo identificador único (modsrc,reqid) ao encontrar
+   deve desbloquear a thread que aguarda pela resposta.
+
+   -> Tanto as replies como os requests podem ter avpairs com dados.
+
+
+
+Funções pertencentes a este módulo:
+
+wstatus modmgr_load(modmgr_load_t load_data)
+	load_data:
+		- listen socket port (unsigned int)
+		- listen IP (string)
+		- enable server mode (bool)
+wstatus modmgr_mod_request(modname_t mod_src,modname_t mod_dst,jmlist avpair_list,uint *reply_code)
+
+wstatus _modmgr_mod_alloc
+wstatus _modmgr_mod_free
+wstatus _modmgr_mod_register(
+		- remote? se sim criar socket para comunicar com 
+wstatus _modmgr_mod_unregister
+
+Funções que são platform-dependent:
+
+wstatus _wsock_open(wsock_opt_t wsopen,wsock_t *wsock)
+	wsock_opt_t: bind port, send/recv
+wstatus _wsock_read(wsock_t wsock,char *buffer_ptr,uint buffer_size,uint *buffer_used)
+wstatus _wsock_write(wsock_t wsock,char *buffer_ptr,uint buffer_size,uint *buffer_used)
+wstatus _wsock_close(wsock_t wsock)
+
