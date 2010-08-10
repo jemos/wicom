@@ -33,6 +33,9 @@ be very similar to the primitive shapes provided by wview
 in the future wview might have custom shapes made of various
 wview shapes (eg. label = text + background rectangle).
 
+If there is any shape change, wviewctl should detect that
+and request a wview redraw.
+
 WVIEWCTL INTERNALS
 
 This module might need to use multithreading and synchronization
@@ -55,6 +58,21 @@ It is required then that the shapemgr and the plantmgr support
 multithreading, so they should use synchronization objects
 in the list of shapes and list of plants. The same applies to
 wviewctl in the case of callback lists.
+
+Worker Thread
+
+The worker thread is the thread that communicates with the
+wview module it also processes requests from client code.
+
+Requests are transparent to client code, in the point of
+view of the client, its just calling a function from wviewctl,
+that function internally will however play with the request
+queue.
+
+Not all functions from wviewctl available to the client
+need to use the request queue, only those that require
+contact with wview module.
+
 
 ISSUE #1: how the client code above wviewctl knows when the user
 closes the window? there should exist a special callback passed

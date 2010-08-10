@@ -87,6 +87,10 @@ wview_draw_shape()
   Whenever a frame is to be draw, both of the callbacks are
   called once.
 
+  A shape might have also an identifier associated, this
+  will be used for example whenever the user requests the
+  shapes where the mouse is at.
+
   OpenGL: glBegin, glEnd, glVertex, glColor,...
   WinGDI: during the WM_PAINT, call GDI functions.
 
