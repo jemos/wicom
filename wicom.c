@@ -32,6 +32,7 @@
 #include "wviewctl.h"
 #include "wview.h"
 #include "wchannel.h"
+#include "modmgr.h"
 
 double vtest = 50.0;
 
@@ -195,13 +196,37 @@ return_wch:
 	return;
 }
 
+void request_test(void)
+{
+	request_t req_text;
+	request_t req_bin;
+	char *req_raw = "123 modFrom modTo reqCode name1=value1 name2=\"value2\" name3=value3";
+	struct _jmlist_init_params init = { .flags = 0, .fverbose = 0, .fdump = stdout, .fdebug = 0 };
+
+	jmlist_initialize(&init);
+
+	req_text = (request_t)malloc(sizeof(struct _request_t) + strlen(req_raw) + 1);
+	memset(req_text,0,sizeof(struct _request_t) + strlen(req_raw) + 1);
+	strcpy(req_text->data.text.raw,req_raw);
+	req_text->stype = REQUEST_STYPE_TEXT;
+
+	_req_to_bin(req_text,&req_bin);
+
+	jmlist_dump(req_bin->data.bin.nvl);
+
+	jmlist_uninitialize();
+	return;
+}
+
 int main(int argc,char *argv[])
 {
 	wstatus s;
 	wview_load_t load;
 	char buffer[32];
 
-	wchannel_test();
+	request_test();
+
+	//wchannel_test();
 
 	return EXIT_SUCCESS;
 

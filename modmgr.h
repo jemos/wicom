@@ -185,6 +185,7 @@
 #define REQIDSIZE (sizeof("65535")-1)
 #define REQTYPESIZE 1
 #define REQMODSIZE 64
+#define REQCODESIZE 64
 
 #ifdef req
 #error AAAAAAAA
@@ -241,6 +242,13 @@ typedef struct _request_t {
 	/* don't add fields below data.. */
 } *request_t;
 
+#define V_NAMECHAR(x) isalnum(x)
+#define V_NVSEPCHAR(x) (x == '=')
+#define V_REQENDCHAR(x) (x == '\0')
+#define V_VALUECHAR(x) (isalnum(x) || (x == '.') || (x == ':') || (x == '_') || (x == '-')) 
+#define V_QVALUECHAR(x) (V_VALUECHAR(x) || (x == ' '))
+#define V_QUOTECHAR(x) (x == '"')
+
 /*
     _req_to_pipe(req)
 	_req_to_text(req)
@@ -268,7 +276,7 @@ typedef enum _request_validate_result {
 } request_validate_result;
 
 wstatus _nvp_alloc(uint16_t name_size,uint16_t value_size,nvpair_t *nvp);
-wstatus _nvp_fill(nvpair_t nvp,char *name_ptr,uint16_t name_size,void *value_ptr,uint16_t value_size);
+wstatus _nvp_fill(char *name_ptr,uint16_t name_size,void *value_ptr,uint16_t value_size,nvpair_t nvp);
 wstatus _nvp_free(nvpair_t nvp);
 
 wstatus _req_to_pipe(request_t req,request_t *req_pipe);
