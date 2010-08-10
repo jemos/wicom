@@ -249,6 +249,55 @@ return_fail:
 
 
 /*
+   _req_text_code
+
+   Helper function to get req-code/reply-code from the text request. Request format is:
+   <req-id><type> <mod_source> <mod_dest> <req-code-id>|reply-code-id> argNameN=argValueN<NULL>
+
+   It is necessary that code points to a character buffer with length >= (REQMODSIZE+1).
+   It is assumed that the request format was validated before calling this function.
+*/
+wstatus
+_req_text_code(request_t req,char *code)
+{
+	char reqidt[REQIDSIZE + REQTYPESIZE + 1];
+	char reqsrc[REQMODSIZE+1];
+	char reqdst[REQMODSIZE+1];
+	char reqcode[REQCODESIZE+1];
+
+	dbgprint(MOD_MODMGR,__func__,"called with req=%p, code=%p",req,code);
+
+	if( !req ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid req argument (req=0)");
+		goto return_fail;
+	}
+
+	if( !code ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid code argument (code=0)");
+		goto return_fail;
+	}
+
+	if( req->stype != REQUEST_STYPE_TEXT ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid request to be used with this function");
+		goto return_fail;
+	}
+
+	if( sscanf(req->data.text.raw,"%s %s %s %s",reqidt,reqsrc,reqdst,reqcode) != 4 ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to parse request data!",req);
+		goto return_fail;
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) got request code \"%s\"",req,reqcode);
+	strcpy(code,reqcode);
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) wrote request code into dst=%p (%d bytes long)",
+			req,code,strlen(reqcode));
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+
+return_fail:
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+/*
    _req_text_dst
 
    Helper function to get destiny module from the text request. Request format is:
@@ -480,6 +529,12 @@ _req_text_nv_count(request_t req,uint16_t *nvcount)
 
 	dbgprint(MOD_MODMGR,__func__,"(req=%p) found nvpair start at +%d",req,(int)(aux - (char*)&req->data.text.raw));
 
+	if( V_REQENDCHAR(*aux) ) {
+		/* this request doesn't have any nvpair */
+		reqnvcount = 0;
+		goto skip_nvpair_parsing;
+	}
+
 	reqnvcount = 0;
 	state = 0;
 
@@ -510,6 +565,7 @@ _req_text_nv_count(request_t req,uint16_t *nvcount)
 		aux++;
 	}
 
+skip_nvpair_parsing:
 	dbgprint(MOD_MODMGR,__func__,"(req=%p) parsing is finished, detected %u nvpairs",req,reqnvcount);
 	*nvcount = reqnvcount;
 	dbgprint(MOD_MODMGR,__func__,"(req=%p) updated nvcount argument to new value %u",req,*nvcount);
@@ -682,7 +738,7 @@ invalid_char:
 
    Helper function that will parse a name-value pair in text form and return
    some useful information that can be used to convert the name-value pair
-   into other form (fifo, binary). This function can also be used for request
+   into other form (pipe, binary). This function can also be used for request
    validation and others.
 
    It is possible that the specific nvpair doesn't have a value associated,
@@ -793,6 +849,21 @@ _req_from_pipe_to_bin(request_t req,request_t *req_bin)
 }
 
 /*
+   _req_nvl_jml_free
+   
+   Helper callback to free a nvpair data structure, associated to jmlist entry.
+   This is a callback to jmlist_parse function.
+*/
+void _req_nvl_jml_free(void *ptr,void *param)
+{
+	nvpair_t nvp = (nvpair_t)ptr;
+
+	if( nvp ) {
+		_nvp_free(nvp);
+	}
+}
+
+/*
    _req_from_text_to_pipe
 
    Helper function to convert a request data structure from text type to pipe type.
@@ -883,6 +954,13 @@ _req_from_text_to_bin(request_t req,request_t *req_bin)
 	}
 	dbgprint(MOD_MODMGR,__func__,"(req=%p) got request destination module (%s)",req,new_req->data.bin.dst);
 
+	ws = _req_text_code(req,new_req->data.bin.code);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to get request code",req);
+		goto return_fail;
+	}
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) got request code (%s)",req,new_req->data.bin.code);
+
 	/* start processing the aditional nvpairs */
 
 	ws = _req_text_nv_count(req,&nvcount);
@@ -963,7 +1041,7 @@ return_fail:
 	if( new_req )
    	{
 		if( new_req->data.bin.nvl ) {
-			/* TODO: this is not freeing each item!! */
+			jmlist_parse(new_req->data.bin.nvl,_req_nvl_jml_free,0);
 			jmlist_free(new_req->data.bin.nvl);
 		}
 
@@ -1005,6 +1083,87 @@ _req_to_bin(request_t req,request_t *req_bin)
 		default:
 			dbgprint(MOD_MODMGR,__func__,"(req=%p) request has an invalid or unsupported stype (check req pointer...)",req);
 			goto return_fail;
+	}
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+
+return_fail:
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+void _req_dump_header(uint16_t id,request_type_list type,char *mod_src,char *mod_dst,char *req_code)
+{
+	printf(	"    %s %u  %s -> %s (%s)\n",
+			(type == REQUEST_TYPE_REQUEST ? "REQ" : "RLY"),id,
+			mod_src,mod_dst,req_code);
+}
+
+void _req_dump_nvp(char *name_ptr,uint16_t name_size,char *value_ptr,uint16_t value_size)
+{
+	printf("    %s=%s\n",name_ptr,value_ptr);
+}
+
+wstatus
+_req_text_dump(request_t req)
+{
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+void _req_bin_jml_dump(void *ptr,void *param)
+{
+	nvpair_t nvp = (nvpair_t)ptr;
+	_req_dump_nvp(nvp->name_ptr,nvp->name_size,nvp->value_ptr,nvp->value_size);
+}
+
+wstatus
+_req_bin_dump(request_t req)
+{
+	dbgprint(MOD_MODMGR,__func__,"called with req=%p",req);
+
+	_req_dump_header(req->data.bin.id,req->data.bin.type,req->data.bin.src,req->data.bin.dst,req->data.bin.code);
+	jmlist_parse(req->data.bin.nvl,_req_bin_jml_dump,0);
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+}
+
+wstatus
+_req_pipe_dump(request_t req)
+{
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+wstatus
+_req_dump(request_t req)
+{
+	wstatus ws;
+
+	dbgprint(MOD_MODMGR,__func__,"called with req=%p",req);
+
+	switch(req->stype)
+	{
+		case REQUEST_STYPE_BIN:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) calling helper function _req_bin_dump",req);
+			ws = _req_bin_dump(req);
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function _req_bin_dump returned ws=%d",req,ws);
+			break;
+		case REQUEST_STYPE_TEXT:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) calling helper function _req_text_dump",req);
+			ws = _req_text_dump(req);
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function _req_text_dump returned ws=%d",req,ws);
+			break;
+		case REQUEST_STYPE_PIPE:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) calling helper function _req_pipe_dump",req);
+			ws = _req_pipe_dump(req);
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function _req_pipe_dump returned ws=%d",req,ws);
+			break;
+		default:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) request has an invalid or unsupported stype (check req pointer...)",req);
+			goto return_fail;
+	}
+
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function failed, aborting",req);
+		goto return_fail;
 	}
 
 	DBGRET_SUCCESS(MOD_MODMGR);
