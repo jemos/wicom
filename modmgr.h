@@ -216,6 +216,7 @@ typedef struct _req_data_bin {
 	int id;
 	char src[REQMODSIZE];
 	char dst[REQMODSIZE];
+	char code[REQCODESIZE];
 	jmlist nvl;
 } req_data_bin;
 
@@ -292,5 +293,6 @@ wstatus _req_lookup_nv(request_t req,char *value_ptr,int value_size,request_look
 wstatus _req_validate_nv(request_t req,char *name,char *value,request_validate_result *validate_result);
 wstatus _req_insert_nv(request_t req,char *name,char *value);
 wstatus _req_remove_nv(request_t req,char *name);
+wstatus _req_dump(request_t req);
 
 #endif

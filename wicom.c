@@ -212,7 +212,7 @@ void request_test(void)
 
 	_req_to_bin(req_text,&req_bin);
 
-	jmlist_dump(req_bin->data.bin.nvl);
+	_req_dump(req_bin);
 
 	jmlist_uninitialize();
 	return;
