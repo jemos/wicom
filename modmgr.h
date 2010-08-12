@@ -243,6 +243,11 @@ typedef struct _request_t {
 	/* don't add fields below data.. */
 } *request_t;
 
+#define V_RIDCHAR(x) isdigit(x)
+#define V_MODCHAR(x) isalnum(x)
+#define V_CODECHAR(x) (isalnum(x) || (x == '.') || (x == '_') || (x == '-'))
+#define V_TOKSEPCHAR(x) (x == ' ')
+#define V_REPLYCHAR(x) ( (x == 'R') || (x == 'r') )
 #define V_NAMECHAR(x) isalnum(x)
 #define V_NVSEPCHAR(x) (x == '=')
 #define V_REQENDCHAR(x) (x == '\0')

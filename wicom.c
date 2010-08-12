@@ -200,7 +200,9 @@ void request_test(void)
 {
 	request_t req_text;
 	request_t req_bin;
-	char *req_raw = "123 modFrom modTo reqCode name1=value1 name2=\"value2\" name3=value3";
+	//char *req_raw = "123 modFrom modTo reqCode name1=value1 name2=\"value2\" name3=value3";
+	char *req_raw = "123 modFrom modTo reqCode";
+
 	struct _jmlist_init_params init = { .flags = 0, .fverbose = 0, .fdump = stdout, .fdebug = 0 };
 
 	jmlist_initialize(&init);

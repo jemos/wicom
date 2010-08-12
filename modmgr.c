@@ -27,13 +27,22 @@
 #include <ctype.h>
 #include <assert.h>
 
+typedef enum _text_token_t {
+	TEXT_TOKEN_ID,
+	TEXT_TOKEN_TYPE,
+	TEXT_TOKEN_MODSRC,
+	TEXT_TOKEN_MODDST,
+	TEXT_TOKEN_CODE,
+	TEXT_TOKEN_NVL
+} text_token_t;
 
 wstatus _req_from_text_to_bin(request_t req,request_t *req_bin);
 wstatus _req_from_pipe_to_bin(request_t req,request_t *req_bin);
 wstatus _req_nv_value_info(char *value_ptr,char **value_start,char **value_end,uint16_t *value_size);
 wstatus _req_nv_name_info(char *name_ptr,char **name_end,uint16_t *name_size);
+wstatus _req_text_token_seek(const char *req_text,text_token_t token,char **token_ptr);
 wstatus _req_text_nv_parse(char *nv_ptr,char **name_start,uint16_t *name_size,char **value_start,uint16_t *value_size);
-wstatus _req_text_nvl_begin(char *req_text,char **nvl_begin);
+
 
 wstatus
 _nvp_alloc(uint16_t name_size,uint16_t value_size,nvpair_t *nvp)
@@ -206,13 +215,16 @@ return_fail:
    <req-id><type> <mod_source> <mod_dest> <req-code-id>|reply-code-id> argNameN=argValueN<NULL>
 
    It is necessary that src points to a character buffer with length >= (REQMODSIZE+1).
-   It is assumed that the request format was validated before calling this function.
+   It is assumed that the request format was validated before calling this function, although
+   the function validates the tokens before module source token and also module source token.
 */
 wstatus
 _req_text_src(request_t req,char *src)
 {
-	char reqidt[REQIDSIZE + REQTYPESIZE + 1];
 	char reqsrc[REQMODSIZE+1];
+	char *src_ptr,*aux_ptr;
+	int i, j;
+	wstatus ws;
 
 	dbgprint(MOD_MODMGR,__func__,"called with req=%p, src=%p",req,src);
 
@@ -231,10 +243,38 @@ _req_text_src(request_t req,char *src)
 		goto return_fail;
 	}
 
-	if( sscanf(req->data.text.raw,"%s %s ",reqidt,reqsrc) != 2 ) {
-		dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to parse request data!",req);
+	ws = _req_text_token_seek(req->data.text.raw,TEXT_TOKEN_MODSRC,&src_ptr);
+	if( ws != WSTATUS_SUCCESS ) {
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	aux_ptr = src_ptr;
+	for( i = 0, j = 0 ; !V_REQENDCHAR(aux_ptr[i]) ; i++ )
+	{
+		if( V_TOKSEPCHAR(aux_ptr[i]) )
+			goto finished_token;
+
+		if( V_MODCHAR(aux_ptr[i]) )
+	   	{
+			if( j >= REQMODSIZE ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) source module name length is overlimit (limit is %d)",req,REQMODSIZE);
+				goto return_fail;
+			}
+			reqsrc[j++] = aux_ptr[i];
+			continue;
+		}
+
+		/* invalid character detected */
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) invalid/unexpected character in MODSRC token (offset %d)",req,i);
 		goto return_fail;
 	}
+
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to reach MODSRC token end",req);
+	goto return_fail;
+
+finished_token:
+
+	reqsrc[j] = '\0';
 
 	dbgprint(MOD_MODMGR,__func__,"(req=%p) got source module name \"%s\"",req,reqsrc);
 	strcpy(src,reqsrc);
@@ -255,15 +295,16 @@ return_fail:
    <req-id><type> <mod_source> <mod_dest> <req-code-id>|reply-code-id> argNameN=argValueN<NULL>
 
    It is necessary that code points to a character buffer with length >= (REQMODSIZE+1).
-   It is assumed that the request format was validated before calling this function.
+   It is assumed that the request format was validated before calling this function, although
+   this function does validate the tokens until the code token and the code token.
 */
 wstatus
 _req_text_code(request_t req,char *code)
 {
-	char reqidt[REQIDSIZE + REQTYPESIZE + 1];
-	char reqsrc[REQMODSIZE+1];
-	char reqdst[REQMODSIZE+1];
+	char *code_ptr,*aux_ptr;
 	char reqcode[REQCODESIZE+1];
+	int i, j;
+	wstatus ws;
 
 	dbgprint(MOD_MODMGR,__func__,"called with req=%p, code=%p",req,code);
 
@@ -282,14 +323,45 @@ _req_text_code(request_t req,char *code)
 		goto return_fail;
 	}
 
-	if( sscanf(req->data.text.raw,"%s %s %s %s",reqidt,reqsrc,reqdst,reqcode) != 4 ) {
-		dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to parse request data!",req);
+	ws = _req_text_token_seek(req->data.text.raw,TEXT_TOKEN_CODE,&code_ptr);
+	if( ws != WSTATUS_SUCCESS ) {
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	aux_ptr = code_ptr;
+	for( i = 0, j = 0 ; !V_REQENDCHAR(aux_ptr[i]) ; i++ )
+	{
+		if( V_TOKSEPCHAR(aux_ptr[i]) )
+			goto finished_token;
+
+		if( V_CODECHAR(aux_ptr[i]) )
+	   	{
+			if( j >= REQCODESIZE ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) request code has too many characters (limit is %d)",req,REQCODESIZE);
+				goto return_fail;
+			}
+			reqcode[j++] = aux_ptr[i];
+			continue;
+		}
+
+		/* invalid character detected */
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) invalid/unexpected character in CODE token (offset %d)",req,i);
 		goto return_fail;
 	}
 
+	/* code is a "special case" token because its the last token of the header of the request,
+	   name-value pairs are not mandatory so after the code token the request might end. */
+
+//	dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to reach CODE token end",req);
+//	goto return_fail;
+
+finished_token:
+
+	reqcode[j] = '\0';
+
 	dbgprint(MOD_MODMGR,__func__,"(req=%p) got request code \"%s\"",req,reqcode);
 	strcpy(code,reqcode);
-	dbgprint(MOD_MODMGR,__func__,"(req=%p) wrote request code into dst=%p (%d bytes long)",
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) wrote request code into code=%p (%d bytes long)",
 			req,code,strlen(reqcode));
 
 	DBGRET_SUCCESS(MOD_MODMGR);
@@ -309,9 +381,10 @@ return_fail:
 wstatus
 _req_text_dst(request_t req,char *dst)
 {
-	char reqidt[REQIDSIZE + REQTYPESIZE + 1];
-	char reqsrc[REQMODSIZE+1];
 	char reqdst[REQMODSIZE+1];
+	char *dst_ptr, *aux_ptr;
+	int i, j;
+	wstatus ws;
 
 	dbgprint(MOD_MODMGR,__func__,"called with req=%p, dst=%p",req,dst);
 
@@ -330,10 +403,38 @@ _req_text_dst(request_t req,char *dst)
 		goto return_fail;
 	}
 
-	if( sscanf(req->data.text.raw,"%s %s %s",reqidt,reqsrc,reqdst) != 3 ) {
-		dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to parse request data!",req);
+	ws = _req_text_token_seek(req->data.text.raw,TEXT_TOKEN_MODDST,&dst_ptr);
+	if( ws != WSTATUS_SUCCESS ) {
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	aux_ptr = dst_ptr;
+	for( i = 0, j = 0 ; !V_REQENDCHAR(aux_ptr[i]) ; i++ )
+	{
+		if( V_TOKSEPCHAR(aux_ptr[i]) )
+			goto finished_token;
+
+		if( V_MODCHAR(aux_ptr[i]) )
+	   	{
+			if( j >= REQMODSIZE ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) destination module name is overlimit (limit is %d)",req,REQMODSIZE);
+				goto return_fail;
+			}
+			reqdst[j++] = aux_ptr[i];
+			continue;
+		}
+
+		/* invalid character detected */
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) invalid/unexpected character in MODDST token",req);
 		goto return_fail;
 	}
+
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to reach MODDST token end",req);
+	goto return_fail;
+
+finished_token:
+
+	reqdst[j] = '\0';
 
 	dbgprint(MOD_MODMGR,__func__,"(req=%p) got destiny module name \"%s\"",req,reqdst);
 	strcpy(dst,reqdst);
@@ -385,9 +486,12 @@ _req_text_rid(request_t req,uint16_t *rid)
 	dbgprint(MOD_MODMGR,__func__,"(req=%p) local reqid cleared, starting the parsing",req);
 
 	for( i = 0 ; i < REQIDSIZE ; i++ )
-   	{		
-		if( !isdigit(req->data.text.raw[i]) )
+   	{
+		if( V_REPLYCHAR(req->data.text.raw[i]) || V_TOKSEPCHAR(req->data.text.raw[i]) )
 			break;
+
+		if( !V_RIDCHAR(req->data.text.raw[i]) )
+			goto invalid_char;
 
 		reqid_char[i] = req->data.text.raw[i];
 	}
@@ -409,6 +513,8 @@ _req_text_rid(request_t req,uint16_t *rid)
 	
 	DBGRET_SUCCESS(MOD_MODMGR);
 
+invalid_char:
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) invalid/unexpected character in ID token (c=%02X)",req,req->data.text.raw[i]);
 return_fail:
 	DBGRET_FAILURE(MOD_MODMGR);
 }
@@ -427,8 +533,9 @@ return_fail:
 wstatus
 _req_text_type(request_t req,request_type_list *type)
 {
-	int i;
+	char *type_ptr;
 	request_type_list reqtype_num;
+	wstatus ws;
 
 	dbgprint(MOD_MODMGR,__func__,"called with req=%p, type=%p",req,type);
 
@@ -447,19 +554,15 @@ _req_text_type(request_t req,request_type_list *type)
 		goto return_fail;
 	}
 
-	for( i = 0 ; i < REQIDSIZE ; i++ ) {
-		if( !isdigit(req->data.text.raw[i]) )
-			break;
-	}
-
-	if( i == 0 ) {
-		dbgprint(MOD_MODMGR,__func__,"(req=%p) invalid request format, reqid was not detected",req);
+	ws = _req_text_token_seek(req->data.text.raw,TEXT_TOKEN_TYPE,&type_ptr);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to reach TYPE token in request",req);
 		goto return_fail;
 	}
 
-	if( (req->data.text.raw[i] == 'R') || (req->data.text.raw[i] == 'r') ) {
+	if( V_REPLYCHAR(*type_ptr) ) {
 		reqtype_num = REQUEST_TYPE_REPLY;
-	} else if( req->data.text.raw[i] == ' ' ) {
+	} else if( V_TOKSEPCHAR(*type_ptr) ) {
 		reqtype_num = REQUEST_TYPE_REQUEST;
 	} else {
 		dbgprint(MOD_MODMGR,__func__,"(req=%p) invalid request type char found after the id",req);
@@ -521,7 +624,7 @@ _req_text_nv_count(request_t req,uint16_t *nvcount)
 	dbgprint(MOD_MODMGR,__func__,"(req=%p) looking up for nvpair start",req);
 
 	aux = (char*)&req->data.text.raw;
-	ws = _req_text_nvl_begin(aux,&aux);
+	ws = _req_text_token_seek(aux,TEXT_TOKEN_NVL,&aux);
 	if( ws != WSTATUS_SUCCESS ) {
 		dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to find nvl begin in request",req);
 		goto return_fail;
@@ -809,37 +912,134 @@ return_fail:
 }
 
 /*
-   _req_text_nvl_begin
+   _req_text_token_seek
 
-   Helper function that returns a pointer to the beginning of the nvpair list
-   from the request in text form.
+   Helper function that returns a pointer to the token (seek_token).
 */
 wstatus
-_req_text_nvl_begin(char *req_text,char **nvl_begin)
+_req_text_token_seek(const char *req_text,text_token_t token,char **token_ptr)
 {
-	int space_count;
+	text_token_t cur_token;
+	char *cur_token_str = 0;
+	uint16_t i;
 
-	dbgprint(MOD_MODMGR,__func__,"called with req_text=%p, nvl_begin=%p",req_text,nvl_begin);
+	dbgprint(MOD_MODMGR,__func__,"called with req_text=%p, token=%d, token_ptr=%p",req_text,token,token_ptr);
 
 	assert(req_text != 0);
-	assert(nvl_begin != 0);
+	assert(token_ptr != 0);
 
-	space_count = 0;
-	while( *req_text )
-   	{		
-		if( (*req_text == ' ') && (space_count++ == 3) )
-			goto at_nvpair;
+	for( cur_token = TEXT_TOKEN_ID, i = 0 ; !V_REQENDCHAR(req_text[i]) ; i++ )
+	{
+		if( cur_token == token )
+			goto reached_token;
 
-		req_text++;
+		switch(cur_token)
+		{
+			case TEXT_TOKEN_ID:
+				
+				if( V_TOKSEPCHAR(req_text[i]) || V_REPLYCHAR(req_text[i]) )
+				{
+					/* finished ID token */
+					cur_token = TEXT_TOKEN_TYPE;
+
+					/* let it repeat for this char, it might belong to TYPE token */
+					i--;
+					continue;
+				}
+
+				if( V_RIDCHAR(req_text[i]) )
+					continue;
+
+				cur_token_str = "ID";
+				goto return_fail;
+			
+			case TEXT_TOKEN_TYPE:
+
+				if( V_REPLYCHAR(req_text[i]) ) {
+					/* TYPE=REPLY finished TYPE token */
+					cur_token = TEXT_TOKEN_MODSRC;
+					continue;
+				}
+
+				if( V_TOKSEPCHAR(req_text[i]) ) {
+					/* TYPE=REQUEST finished TYPE token */
+					cur_token = TEXT_TOKEN_MODSRC;
+					continue;
+				}
+
+				cur_token_str = "TYPE";
+				goto return_fail;
+			
+			case TEXT_TOKEN_MODSRC:
+			
+				if( V_TOKSEPCHAR(req_text[i]) )
+				{
+					cur_token = TEXT_TOKEN_MODDST;
+					continue;
+				}
+
+				if( V_MODCHAR(req_text[i]) )
+					continue;
+
+				cur_token_str = "MODSRC";
+				goto return_fail;
+
+			case TEXT_TOKEN_MODDST:
+
+				if( V_TOKSEPCHAR(req_text[i]) )
+				{
+					cur_token = TEXT_TOKEN_CODE;
+					continue;
+				}
+
+				if( V_MODCHAR(req_text[i]) )
+					continue;
+
+				cur_token_str = "MODDST";
+				goto return_fail;
+
+			case TEXT_TOKEN_CODE:
+
+				if( V_TOKSEPCHAR(req_text[i]) )
+				{
+					cur_token = TEXT_TOKEN_NVL;
+					continue;
+				}
+
+				if( V_CODECHAR(req_text[i]) )
+					continue;
+
+				cur_token_str = "CODE";
+				goto return_fail;
+			case TEXT_TOKEN_NVL:
+			default:
+				dbgprint(MOD_MODMGR,__func__,"invalid/unsupported token selected");
+				goto return_fail;
+		}
 	}
 
-	dbgprint(MOD_MODMGR,__func__,"unable to find nvl begin");
+	if( cur_token == TEXT_TOKEN_CODE ) {
+		/* this request doesn't have any name-value pair */
+		cur_token = TEXT_TOKEN_NVL;
+		/* token_ptr will point to the null char, take care with that Mr.Client code. */
+		goto reached_token;
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"unable to reach to the requested token");
 	DBGRET_FAILURE(MOD_MODMGR);
 
-at_nvpair:
-	req_text++;
-	*nvl_begin = req_text;
+reached_token:
+	dbgprint(MOD_MODMGR,__func__,"found token at offset +%d",i);
+	*token_ptr = (char*)(req_text + i);
+	dbgprint(MOD_MODMGR,__func__,"updated token_ptr to %p",*token_ptr);
 	DBGRET_SUCCESS(MOD_MODMGR);
+
+return_fail:
+	if( cur_token_str )
+		dbgprint(MOD_MODMGR,__func__,"invalid/unexpected character (c=%02X) at %u in token %s",
+				req_text[i], i, cur_token_str);
+
+	DBGRET_FAILURE(MOD_MODMGR);
 }
 
 wstatus
@@ -973,7 +1173,7 @@ _req_from_text_to_bin(request_t req,request_t *req_bin)
 	if( nvcount == 0 )
 		goto skip_nvpair_parsing;
 
-	ws = _req_text_nvl_begin(req->data.text.raw,&aux);
+	ws = _req_text_token_seek(req->data.text.raw,TEXT_TOKEN_NVL,&aux);
 	if( ws != WSTATUS_SUCCESS ) {
 		dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to find nvl begin",req);
 		goto return_fail;
@@ -1170,5 +1370,18 @@ _req_dump(request_t req)
 
 return_fail:
 	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+/*
+   _req_to_text
+
+   Helper function to convert a request to a new request with text form.
+   Client code is responsible to free the new allocated request if the function
+   succeds.
+*/
+wstatus
+_req_to_text(request_t req,request_t *req_text)
+{
+	DBGRET_SUCCESS(MOD_MODMGR);
 }
 
