@@ -18,3 +18,33 @@
 	Centro de Informatica do IST - Universidade Tecnica de Lisboa 
 */
 
+#include "wstatus.h"
+
+/*
+   wstatus_str
+
+   Function that returns a string that corresponds to the wstatus ws.
+*/
+const char *wstatus_str(wstatus ws)
+{
+	switch(ws)
+	{
+		case WSTATUS_FAILURE:
+			return "WSTATUS_FAILURE";
+		case WSTATUS_SUCCESS:
+			return "WSTATUS_SUCCESS";
+		case WSTATUS_SEMIFAIL:
+			return "WSTATUS_SEMIFAIL";
+		case WSTATUS_UNIMPLEMENTED:
+			return "WSTATUS_UNIMPLEMENTED";
+		case WSTATUS_UNSUPPORTED:
+			return "WSTATUS_UNSUPPORTED";
+		case WSTATUS_INVALID_ARGUMENT:
+			return "WSTATUS_INVALID_ARGUMENT";
+		case WSTATUS_MOD_UNINITIALIZED:
+			return "WSTATUS_MOD_UNINITIALIZED";
+		default:
+			return "(UNKNOW WSTATUS)";
+	}
+}
+

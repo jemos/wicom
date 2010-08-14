@@ -31,6 +31,7 @@ typedef enum _wstatus {
 	WSTATUS_MOD_UNINITIALIZED
 } wstatus;
 
+const char *wstatus_str(wstatus ws);
 
 #endif
 
