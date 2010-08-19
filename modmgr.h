@@ -182,6 +182,8 @@
 #include "jmlist.h"
 #include "wlock.h"
 
+#define MAXREQID 65535
+
 #define REQIDSIZE (sizeof("65535")-1)
 #define REQTYPESIZE 1
 #define REQMODSIZE 64
@@ -201,6 +203,12 @@ typedef enum _request_type_list {
 	REQUEST_TYPE_REQUEST,
 	REQUEST_TYPE_REPLY
 } request_type_list;
+
+typedef enum _value_format_list {
+	VALUE_FORMAT_UNQUOTED = 0,
+	VALUE_FORMAT_QUOTED = 1,
+	VALUE_FORMAT_ENCODED = 2
+} value_format_list;
 
 /* nvpair_t: this data structure must have well defined sizes */
 typedef struct _nvpair_t
@@ -243,16 +251,19 @@ typedef struct _request_t {
 	/* don't add fields below data.. */
 } *request_t;
 
+#define rtype_str(x) (x == REQUEST_TYPE_REQUEST ? "REQUEST" : "REPLY")
 #define V_RIDCHAR(x) isdigit(x)
 #define V_MODCHAR(x) isalnum(x)
 #define V_CODECHAR(x) (isalnum(x) || (x == '.') || (x == '_') || (x == '-'))
 #define V_TOKSEPCHAR(x) (x == ' ')
 #define V_REPLYCHAR(x) ( (x == 'R') || (x == 'r') )
 #define V_NAMECHAR(x) isalnum(x)
+#define V_ENCPREFIX(x) (x == '#')
 #define V_NVSEPCHAR(x) (x == '=')
 #define V_REQENDCHAR(x) (x == '\0')
 #define V_VALUECHAR(x) (isalnum(x) || (x == '.') || (x == ':') || (x == '_') || (x == '-')) 
 #define V_QVALUECHAR(x) (V_VALUECHAR(x) || (x == ' '))
+#define V_EVALUECHAR(x) (isdigit(x) || (x == 'A') || (x == 'B') || (x == 'C') || (x == 'D') || (x == 'E') || (x == 'F'))
 #define V_QUOTECHAR(x) (x == '"')
 
 /*
@@ -284,6 +295,10 @@ typedef enum _request_validate_result {
 wstatus _nvp_alloc(uint16_t name_size,uint16_t value_size,nvpair_t *nvp);
 wstatus _nvp_fill(char *name_ptr,uint16_t name_size,void *value_ptr,uint16_t value_size,nvpair_t nvp);
 wstatus _nvp_free(nvpair_t nvp);
+wstatus _nvp_value_format(const char *value_ptr,const unsigned int value_size,value_format_list *value_format);
+wstatus _nvp_value_encode(const char *value_ptr,const unsigned int value_size,char **value_encoded);
+wstatus _nvp_value_encoded_size(const char *value_ptr,const unsigned int value_size,unsigned int *encoded_size);
+
 
 wstatus _req_to_pipe(request_t req,request_t *req_pipe);
 wstatus _req_to_text(request_t req,request_t *req_text);
@@ -299,5 +314,16 @@ wstatus _req_validate_nv(request_t req,char *name,char *value,request_validate_r
 wstatus _req_insert_nv(request_t req,char *name,char *value);
 wstatus _req_remove_nv(request_t req,char *name);
 wstatus _req_dump(request_t req);
+wstatus _req_diff(request_t req1_ptr,char *req1_label,request_t req2,char *req2_label);
+wstatus _req_from_string(const char *raw_text,request_t *req_text);
+
+
+#ifndef MAX
+#define MAX(a,b) (a > b ? a : b)
+#endif
+
+#ifndef MIN
+#define MIN(a,b) (a < b ? a : b)
+#endif
 
 #endif

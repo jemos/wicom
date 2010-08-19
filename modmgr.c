@@ -41,8 +41,9 @@ wstatus _req_from_pipe_to_bin(request_t req,request_t *req_bin);
 wstatus _req_nv_value_info(char *value_ptr,char **value_start,char **value_end,uint16_t *value_size);
 wstatus _req_nv_name_info(char *name_ptr,char **name_end,uint16_t *name_size);
 wstatus _req_text_token_seek(const char *req_text,text_token_t token,char **token_ptr);
-wstatus _req_text_nv_parse(char *nv_ptr,char **name_start,uint16_t *name_size,char **value_start,uint16_t *value_size);
-
+wstatus _req_text_nv_parse(char *nv_ptr,char **name_start,uint16_t *name_size,char **value_start,uint16_t *value_size,value_format_list *value_format);
+wstatus _req_from_bin_to_text(request_t req,request_t *req_text);
+wstatus _req_from_pipe_to_text(request_t req,request_t *req_text);
 
 wstatus
 _nvp_alloc(uint16_t name_size,uint16_t value_size,nvpair_t *nvp)
@@ -133,6 +134,8 @@ return_fail:
 wstatus
 _nvp_fill(char *name_ptr,uint16_t name_size,void *value_ptr,uint16_t value_size,nvpair_t nvp)
 {
+	char *decoded_ptr = 0;
+
 	dbgprint(MOD_MODMGR,__func__,"called with nvp=%p, name_ptr=%p, name_size=%u, value_ptr=%p, value_size=%u",
 			nvp,name_ptr,name_size,value_ptr,value_size);
 
@@ -164,16 +167,20 @@ _nvp_fill(char *name_ptr,uint16_t name_size,void *value_ptr,uint16_t value_size,
 	memcpy(nvp->name_ptr,name_ptr,name_size);
 	dbgprint(MOD_MODMGR,__func__,"copied %d bytes successfully of the name to the nvp structure (%p)",name_size,nvp);
 
-	if( nvp->value_size )
-	{
-		dbgprint(MOD_MODMGR,__func__,"copying %u bytes of the value to nvp structure (%p)",value_size,nvp);
-		memcpy(nvp->value_ptr,value_ptr,value_size);
-		dbgprint(MOD_MODMGR,__func__,"copied %d bytes successfully of the value to the nvp structure (%p)",value_size,nvp);
+	if( !nvp->value_size ) {
+		DBGRET_SUCCESS(MOD_MODMGR);
 	}
+
+	dbgprint(MOD_MODMGR,__func__,"copying %u bytes of the value to nvp structure (%p)",value_size,nvp);
+	memcpy(nvp->value_ptr,value_ptr,value_size);
+	dbgprint(MOD_MODMGR,__func__,"copied %d bytes successfully of the value to the nvp structure (%p)",value_size,nvp);
 
 	DBGRET_SUCCESS(MOD_MODMGR);
 
 return_fail:
+	if( decoded_ptr )
+		free(decoded_ptr);
+
 	DBGRET_FAILURE(MOD_MODMGR);
 }
 
@@ -603,6 +610,7 @@ _req_text_nv_count(request_t req,uint16_t *nvcount)
 	char *name_start,*value_start;
 	uint16_t name_size,value_size;
 	wstatus ws;
+	value_format_list value_format;
 
 	dbgprint(MOD_MODMGR,__func__,"called with req=%p, nvcount=%p",req,nvcount);
 
@@ -643,7 +651,7 @@ _req_text_nv_count(request_t req,uint16_t *nvcount)
 
 	while(1)
 	{
-		ws = _req_text_nv_parse(aux,&name_start,&name_size,&value_start,&value_size);
+		ws = _req_text_nv_parse(aux,&name_start,&name_size,&value_start,&value_size,&value_format);
 		if( ws != WSTATUS_SUCCESS ) {
 			dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to process text request");
 			goto return_fail;
@@ -654,6 +662,9 @@ _req_text_nv_count(request_t req,uint16_t *nvcount)
 			aux = value_start + value_size;
 			if( V_QUOTECHAR(*aux) )
 				aux++;
+		} else
+		{
+			aux = name_start + name_size;
 		}
 
 		if( V_REQENDCHAR(*aux) )
@@ -705,7 +716,7 @@ _req_nv_name_info(char *name_ptr,char **name_end,uint16_t *name_size)
 
 	for( i = 0 ; ; i++ )
 	{
-		if( V_REQENDCHAR(name_ptr[i]) || V_NVSEPCHAR(name_ptr[i]) )
+		if( V_REQENDCHAR(name_ptr[i]) || V_NVSEPCHAR(name_ptr[i]) || V_TOKSEPCHAR(name_ptr[i]) )
 			goto end_of_name;
 
 		if( !V_NAMECHAR(name_ptr[i]) )
@@ -742,9 +753,9 @@ return_fail:
 wstatus
 _req_nv_value_info(char *value_ptr,char **value_start,char **value_end,uint16_t *value_size)
 {
-	uint16_t i = 0;
+	unsigned int i = 0;
 	char end_char = ' ',c;
-	bool quoted = false;
+	bool quoted = false, encoded = false;
 
 	assert( value_ptr != 0 );
 	assert( value_end != 0 );
@@ -754,6 +765,9 @@ _req_nv_value_info(char *value_ptr,char **value_start,char **value_end,uint16_t 
 		quoted = true;
 		end_char = value_ptr[0];
 		i = 1;
+	} else if( V_ENCPREFIX(value_ptr[0]) ) {
+		/* this is an encoded value */
+		encoded = true;
 	}
 
 	for( ; ; i++ )
@@ -770,10 +784,16 @@ _req_nv_value_info(char *value_ptr,char **value_start,char **value_end,uint16_t 
 			goto end_of_value;
 		}
 
-		if( (quoted && !V_QVALUECHAR(c)) || !V_VALUECHAR(c) ) {
-			/* found an invalid character in VALUE field */
-			goto invalid_char;
-		}
+		if( encoded && V_EVALUECHAR(c) )
+			continue;
+
+		if( quoted && V_QVALUECHAR(c) ) 
+			continue;
+
+		if( !quoted && V_VALUECHAR(c) )
+			continue;
+
+		goto invalid_char;
 	}
 
 	/* should not get here in any way? */
@@ -821,9 +841,9 @@ end_of_value:
 		}
 	} else
 	{
-		*value_start = value_ptr;
-		*value_end = value_ptr + i - 1;
 		*value_size = i;
+		*value_start = value_ptr;
+		*value_end = value_ptr + *value_size - 1;
 	}
 
 	dbgprint(MOD_MODMGR,__func__,"updated value_start=%p, value_end=%p, value_size=%u",
@@ -834,6 +854,42 @@ end_of_value:
 invalid_char:
 	dbgprint(MOD_MODMGR,__func__,"invalid or unexpected character found in VALUE field (c=%02X)",c);
 	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+/*
+   _req_nv_value_format
+
+   Helper function to get value format.
+*/
+wstatus
+_req_nv_value_format(const char *value_ptr,value_format_list *value_format)
+{
+	dbgprint(MOD_MODMGR,__func__,"called with value_ptr=%p, value_format=%p",value_ptr,value_format);
+
+	if( !value_ptr ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid value_ptr argument (value_ptr=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !value_format ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid value_format argument (value_format=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( V_ENCPREFIX(*value_ptr) ) {
+		*value_format = VALUE_FORMAT_ENCODED;
+	} else if ( V_QUOTECHAR(*value_ptr) ) {
+		*value_format = VALUE_FORMAT_QUOTED;
+	} else if ( V_VALUECHAR(*value_ptr) ) {
+		*value_format = VALUE_FORMAT_UNQUOTED;
+	} else {
+		dbgprint(MOD_MODMGR,__func__,"unable to determine value format (c=%c)",*value_ptr);
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"updated value_format value to %d",*value_format);
+
+	DBGRET_SUCCESS(MOD_MODMGR);
 }
 
 /*
@@ -849,7 +905,8 @@ invalid_char:
    be zero, if it happens, this function returns failure.
 */
 wstatus
-_req_text_nv_parse(char *nv_ptr,char **name_start,uint16_t *name_size,char **value_start,uint16_t *value_size)
+_req_text_nv_parse(char *nv_ptr,char **name_start,uint16_t *name_size,
+		char **value_start,uint16_t *value_size,value_format_list *value_format)
 {
 	wstatus ws;
 	char *l_name_end;
@@ -857,15 +914,18 @@ _req_text_nv_parse(char *nv_ptr,char **name_start,uint16_t *name_size,char **val
 	char *l_value_start;
 	char *l_value_end;
 	uint16_t l_value_size;
+	value_format_list l_value_format;
 
-	dbgprint(MOD_MODMGR,__func__,"called with nv_ptr=%p, name_start=%p, name_size=%p, value_start=%p, value_size=%p",
-			nv_ptr,name_start,name_size,value_start,value_size);
+	dbgprint(MOD_MODMGR,__func__,"called with nv_ptr=%p, name_start=%p, "
+			"name_size=%p, value_start=%p, value_size=%p, value_format=%p",
+			nv_ptr,name_start,name_size,value_start,value_size,value_format);
 
 	assert(nv_ptr != 0);
 	assert(name_start != 0);
 	assert(name_size != 0);
 	assert(value_start != 0);
 	assert(value_size != 0);
+	assert(value_format != 0);
 
 	/* start by parsing name token */
 	ws = _req_nv_name_info(nv_ptr,&l_name_end,&l_name_size);
@@ -881,7 +941,7 @@ _req_text_nv_parse(char *nv_ptr,char **name_start,uint16_t *name_size,char **val
 
 	/* verify if is there any value associated to this nvpair */
 
-	if( V_REQENDCHAR(nv_ptr[l_name_size]) ) {
+	if( V_REQENDCHAR(nv_ptr[l_name_size]) || V_TOKSEPCHAR(nv_ptr[l_name_size]) ) {
 		l_value_start = 0;
 		l_value_size = 0;
 		goto no_value;
@@ -892,7 +952,16 @@ _req_text_nv_parse(char *nv_ptr,char **name_start,uint16_t *name_size,char **val
 		goto return_fail;
 	}
 
-	/* we've a value associated, try parse it */
+	/* get value format using specific function */
+
+	ws = _req_nv_value_format(nv_ptr+l_name_size+1,&l_value_format);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"failed to get VALUE token format of this nvpair");
+		goto return_fail;
+	}
+
+	/* get value using helper function, this will get the full token in raw form,
+	   so even if its encoded, it will return the encoded value. */
 	ws = _req_nv_value_info(nv_ptr+l_name_size+1,&l_value_start,&l_value_end,&l_value_size);
 	if( ws != WSTATUS_SUCCESS ) {
 		dbgprint(MOD_MODMGR,__func__,"failed to parse VALUE token of this nvpair");
@@ -903,7 +972,9 @@ _req_text_nv_parse(char *nv_ptr,char **name_start,uint16_t *name_size,char **val
 no_value:
 	*value_start = l_value_start;
 	*value_size = l_value_size;
-	dbgprint(MOD_MODMGR,__func__,"updated value_start=%p, value_size=%u",*value_start,*value_size);
+	*value_format = l_value_format;
+	dbgprint(MOD_MODMGR,__func__,"updated value_start=%p, value_size=%u, value_format=%d",
+			*value_start,*value_size,*value_format);
 
 	DBGRET_SUCCESS(MOD_MODMGR);
 
@@ -1064,6 +1135,75 @@ void _req_nvl_jml_free(void *ptr,void *param)
 }
 
 /*
+   _nvp_value_decoded_size
+
+   Helper function to get decoded value size.
+*/
+wstatus
+_nvp_value_decoded_size(const char *value_ptr,const uint16_t value_size,unsigned int *decoded_size)
+{
+	dbgprint(MOD_MODMGR,__func__,"called with value_ptr=%p, value_size=%u, decoded_size=%p",
+			value_ptr,value_size,decoded_size);
+
+	if( !value_size ) {
+		dbgprint(MOD_MODMGR,__func__,"value is empty (value_size=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !decoded_size ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid decoded_size argument (decoded_size=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	*decoded_size = 2*value_size;
+	dbgprint(MOD_MODMGR,__func__,"updated decoded_size value to %u",*decoded_size);
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+}
+
+/*
+   _nvp_value_decode
+
+   Helper function to decode a value to its original format.
+   The decoded_size argument tells how big is the decoded_ptr buffer.
+*/
+wstatus
+_nvp_value_decode(const char *value_ptr,const uint16_t value_size,char *decoded_ptr,unsigned int decoded_size)
+{
+	unsigned int i,j,k;
+	char hex_str[3];
+
+	dbgprint(MOD_MODMGR,__func__,"called with value_ptr=%p, value_size=%u, decoded_ptr=%p, decoded_size=%u",
+			value_ptr,value_size,decoded_ptr,decoded_size);
+
+	if( value_size && 1 ) {
+		dbgprint(MOD_MODMGR,__func__,"value is invalid for decoding, value_size should be even");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	for( i = 0, j = 0 ; i < value_size ; i+= 2 )
+	{
+		hex_str[0] = value_ptr[i];
+		hex_str[1] = value_ptr[i+1];
+		hex_str[2] = '\0';
+
+		if( sscanf(hex_str,"%X",&k) != 1 ) {
+			dbgprint(MOD_MODMGR,__func__,"couldn't convert %s to binary",hex_str);
+			DBGRET_FAILURE(MOD_MODMGR);
+		}
+
+		if( j >= decoded_size ) {
+			dbgprint(MOD_MODMGR,__func__,"decoded buffer is too small for value");
+			DBGRET_FAILURE(MOD_MODMGR);
+		}
+
+		decoded_ptr[j++] = (char) (k & 0xFF);
+	}
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+}
+
+/*
    _req_from_text_to_pipe
 
    Helper function to convert a request data structure from text type to pipe type.
@@ -1083,6 +1223,9 @@ _req_from_text_to_bin(request_t req,request_t *req_bin)
 	char *aux;
 	char *name_start,*value_start;
 	uint16_t name_size,value_size;
+	value_format_list value_format;
+	char *decoded_ptr = 0;
+	unsigned int decoded_size = 0;
 
 	dbgprint(MOD_MODMGR,__func__,"called with req=%p, req_bin=%p",req,req_bin);
 
@@ -1182,14 +1325,45 @@ _req_from_text_to_bin(request_t req,request_t *req_bin)
 	for( nv_idx = 1 ; ; nv_idx++ )
    	{
 		/* try to parse nvpair text tokens */
-		ws = _req_text_nv_parse(aux,&name_start,&name_size,&value_start,&value_size);
+		ws = _req_text_nv_parse(aux,&name_start,&name_size,&value_start,&value_size,&value_format);
 		if( ws != WSTATUS_SUCCESS ) {
 			dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to process text request");
 			goto return_fail;
 		}
 
+		if( value_format == VALUE_FORMAT_ENCODED )
+	   	{
+			ws = _nvp_value_decoded_size(value_start,value_size,&decoded_size);
+			if( ws != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to get decoded size for nv_idx=%u",req,nv_idx);
+				goto return_fail;
+			}
+
+			/* allocate buffer that will store the decoded value */
+
+			decoded_ptr = (char*)malloc(decoded_size);
+			if( !decoded_ptr ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) malloc failed on decoded_size=%u",req,decoded_size);
+				goto return_fail;
+			}
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) allocated buffer for decoded value successful (ptr=%p)",
+					req,decoded_ptr);
+
+			ws = _nvp_value_decode(value_start,value_size,decoded_ptr,decoded_size);
+			if( ws != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to decode value (ws=%s)",req,wstatus_str(ws));
+				goto return_fail;
+			}
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) decoded successfully the value",req);
+		}
+
 		/* allocate new nvpair data structure for this nvpair */
-		ws = _nvp_alloc(name_size,value_size,&nvp);
+
+		if( value_format == VALUE_FORMAT_ENCODED )
+			ws = _nvp_alloc(name_size,decoded_size,&nvp);
+		else
+			ws = _nvp_alloc(name_size,value_size,&nvp);
+
 		if( ws != WSTATUS_SUCCESS ) {
 			dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to allocate a new nvpair (name_size=%u, value_size=%u)",
 					req,name_size,value_size);
@@ -1198,12 +1372,25 @@ _req_from_text_to_bin(request_t req,request_t *req_bin)
 		dbgprint(MOD_MODMGR,__func__,"(req=%p) allocated new nvpair data structure successfully (p=%p)",req,nvp);
 
 		/* fill the new data structure with the tokens */
-		ws = _nvp_fill(name_start,name_size,value_start,value_size,nvp);
+		
+		if( value_format == VALUE_FORMAT_ENCODED )
+			ws = _nvp_fill(name_start,name_size,decoded_ptr,decoded_size,nvp);
+		else
+			ws = _nvp_fill(name_start,name_size,value_start,value_size,nvp);
+
 		if( ws != WSTATUS_SUCCESS ) {
 			dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to fill the new nvpair (p=%p)",req,nvp);
 			goto return_fail;
 		}
 		dbgprint(MOD_MODMGR,__func__,"(req=%p) new nvpair ready for insertion in nvpair list",req);
+
+		/* we can now free the decoded buffer if it was used */
+		
+		if( decoded_ptr ) {
+			free(decoded_ptr);
+			decoded_ptr = 0;
+			decoded_size = 0;
+		}
 
 		jmls = jmlist_insert(new_req->data.bin.nvl,nvp);
 		if( jmls != JMLIST_ERROR_SUCCESS ) {
@@ -1215,7 +1402,8 @@ _req_from_text_to_bin(request_t req,request_t *req_bin)
 			aux = value_start + value_size;
 			if( V_QUOTECHAR(*aux) )
 				aux++;
-		}
+		} else
+			 aux = name_start + name_size;
 
 		if( V_REQENDCHAR(*aux) )
 			/* end of request was reached */
@@ -1247,6 +1435,9 @@ return_fail:
 
 		free(new_req);
 	}
+
+	if( decoded_ptr )
+		free(decoded_ptr);
 
 	DBGRET_FAILURE(MOD_MODMGR);
 }
@@ -1306,7 +1497,8 @@ void _req_dump_nvp(char *name_ptr,uint16_t name_size,char *value_ptr,uint16_t va
 wstatus
 _req_text_dump(request_t req)
 {
-	DBGRET_FAILURE(MOD_MODMGR);
+	printf("    %s|\n",req->data.text.raw);
+	DBGRET_SUCCESS(MOD_MODMGR);
 }
 
 void _req_bin_jml_dump(void *ptr,void *param)
@@ -1382,6 +1574,704 @@ return_fail:
 wstatus
 _req_to_text(request_t req,request_t *req_text)
 {
+	wstatus ws;
+	dbgprint(MOD_MODMGR,__func__,"called with req=%p, req_text=%p",req,req_text);
+
+	switch(req->stype)
+	{
+		case REQUEST_STYPE_BIN:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) calling helper function _req_from_bin_to_text",req);
+			ws = _req_from_bin_to_text(req,req_text);
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function _req_from_bin_to_text returned ws=%d",req,ws);
+			if( ws != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function failed, aborting",req);
+				goto return_fail;
+			}
+			break;
+		case REQUEST_STYPE_TEXT:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) request is already in text data structure");
+			goto return_fail;
+		case REQUEST_STYPE_PIPE:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) calling helper function _req_from_pipe_to_text",req);
+			ws = _req_from_pipe_to_text(req,req_text);
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function _req_from_pipe_to_text returned ws=%d",req,ws);
+			if( ws != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function failed, aborting",req);
+				goto return_fail;
+			}
+			break;
+		default:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) request has an invalid or unsupported stype (check req pointer...)",req);
+			goto return_fail;
+	}
+
 	DBGRET_SUCCESS(MOD_MODMGR);
+
+return_fail:
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+/*
+   _req_bin_nvl_sum_length_jlcb
+
+   Helper function used by req_from_bin_to_text, is a jmlist parser callback that sums
+   the length of each nvl entry. The param pointer points to an integer which will receive
+   the lengths.
+*/
+void _req_bin_nvl_sum_length_jlcb(void *ptr,void *param)
+{
+	nvpair_t nvp = (nvpair_t)ptr;
+	int *nvl_size = (int*)param;
+	unsigned int value_size;
+	value_format_list value_format;
+	wstatus ws;
+
+	/* check if this nvpair has a value associated first */
+	if( !nvp->value_size ) {
+		/* name_size + ' ' */
+		*nvl_size += nvp->name_size + 1;
+		return;
+	}
+
+	/* get nvpair appropriate value format */
+	ws = _nvp_value_format(nvp->value_ptr,nvp->value_size,&value_format);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"unable to get value format (nvp=%p)",nvp);
+		return;
+	}
+
+	ws =_nvp_value_encoded_size(nvp->value_ptr,nvp->value_size,&value_size);
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"unable to get encoded value size (nvp=%p)",nvp);
+		return;
+	}
+
+	switch( value_format ) {
+		case VALUE_FORMAT_UNQUOTED:
+			/* name_size + '=' + value_size + ' ' */
+			*nvl_size += nvp->name_size + 1 + nvp->value_size + 1;
+			break;
+		case VALUE_FORMAT_QUOTED:
+			/* name_size + '=' + '"' + value_size + '"' + ' '   */
+			*nvl_size += nvp->name_size + 1 + 1 + nvp->value_size + 1 + 1;
+			break;
+		case VALUE_FORMAT_ENCODED:
+			/* name_size + '#' + value_size + ' ' */
+			*nvl_size += nvp->name_size + 1 + value_size;
+			break;
+	}
+
+	return;
+}
+
+/*
+   _nvp_value_format
+
+   Helper function that decides the format to use in the value of the name-value pair.
+*/
+wstatus
+_nvp_value_format(const char *value_ptr, const unsigned int value_size,value_format_list *value_format)
+{
+	unsigned int i;
+	value_format_list l_value_format = VALUE_FORMAT_UNQUOTED;
+	value_format_list format_transform[][3] = {
+		{ VALUE_FORMAT_UNQUOTED , VALUE_FORMAT_QUOTED , VALUE_FORMAT_ENCODED },
+		{ VALUE_FORMAT_QUOTED , VALUE_FORMAT_QUOTED , VALUE_FORMAT_ENCODED },
+		{ VALUE_FORMAT_ENCODED , VALUE_FORMAT_ENCODED , VALUE_FORMAT_ENCODED }
+	}; /* format_transform[FORM][TO] */
+
+	dbgprint(MOD_MODMGR,__func__,"called with value_ptr=%p, value_size=%u",value_ptr,value_size);
+
+	if( !value_ptr ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid value_ptr argument (value_ptr=0)");
+		goto return_fail;
+	}
+
+	if( !value_size ) {
+		dbgprint(MOD_MODMGR,__func__,"value is empty (value_size=0), any format will do");
+		goto return_fail;
+	}
+
+	if( !value_format ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid value_format argument (value_format=0)");
+		goto return_fail;
+	}
+
+	for( i = 0 ; i < value_size ; i++ )
+	{
+		if( V_VALUECHAR(value_ptr[i]) ) {
+			l_value_format = format_transform[l_value_format][VALUE_FORMAT_UNQUOTED];
+			continue;
+		}
+
+		if( V_QVALUECHAR(value_ptr[i]) ) {
+			l_value_format = format_transform[l_value_format][VALUE_FORMAT_QUOTED];
+			continue;
+		}
+
+		l_value_format = VALUE_FORMAT_ENCODED;
+		break;
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"finished processing value bytes, result is format %d",l_value_format);
+
+	*value_format = l_value_format;
+	
+	dbgprint(MOD_MODMGR,__func__,"updated value_format to %d",*value_format);
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+
+return_fail:
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+/*
+	_nvp_value_encoded_size
+
+	Helper function to obtain the length in characters of the encoded value.
+	This length includes the null char and is 1 based (starts at one).
+*/
+wstatus
+_nvp_value_encoded_size(const char *value_ptr,const unsigned int value_size,unsigned int *encoded_size)
+{
+	dbgprint(MOD_MODMGR,__func__,"called with value_ptr=%p, value_size=%u, encoded_size=%p",
+			value_ptr,value_size,encoded_size);
+
+	if( !value_ptr ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid value_ptr argument (value_ptr=0)");
+		goto return_fail;
+	}
+
+	if( !value_size ) {
+		dbgprint(MOD_MODMGR,__func__,"this value is empty (value_size=0)");
+		goto return_fail;
+	}
+
+	if( !encoded_size ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid encoded_size argument (encoded_size=0)");
+		goto return_fail;
+	}
+
+	*encoded_size = (value_size * 2) + 1;
+	dbgprint(MOD_MODMGR,__func__,"updated encoded_size value to %u",*encoded_size);
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+
+return_fail:
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+/*
+   _nvp_value_encode
+
+   Helper function to encode the value data into a text string, here we've various options,
+   one could use base64, uenc, etc. I'm going to use HEX encoding for now its the easiest to
+   implement and to determine the final size, basically is the double.
+*/
+wstatus
+_nvp_value_encode(const char *value_ptr,const unsigned int value_size,char **value_encoded)
+{
+	char *aux_ptr;
+	unsigned int i;
+	char c;
+	char conv_table[] = {"0123456789ABCDEF"};
+
+	dbgprint(MOD_MODMGR,__func__,"called with value_ptr=%p, value_size=%u, value_encoded=%p",
+			value_ptr,value_size,value_encoded);
+
+	aux_ptr = (char*)malloc(sizeof(char)*value_size*2 + sizeof(char));
+	if( !aux_ptr ) {
+		dbgprint(MOD_MODMGR,__func__,"malloc failed (size=%d)",sizeof(char)*value_size*2 + sizeof(char));
+		goto return_fail;
+	}
+	*value_encoded = aux_ptr;
+
+	dbgprint(MOD_MODMGR,__func__,"starting the conversion of %d bytes",value_size);
+	for( i = 0 ; i < value_size ; i++ )
+	{
+		c = value_ptr[i];
+
+		*aux_ptr = conv_table[ (c & 0xF0) >> 4 ];
+		aux_ptr++;
+		*aux_ptr = conv_table[ (c & 0x0F) ];
+		aux_ptr++;
+	}
+	dbgprint(MOD_MODMGR,__func__,"finished conversion of %d bytes, aux_ptr has offset +%d bytes",
+			value_size,aux_ptr - *value_encoded);
+
+	/* cat the null char */
+	*aux_ptr = '\0';
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+
+return_fail:
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+/*
+   _req_bin_nvl_insert_jlcb
+
+   Helper function used by req_from_bin_to_text, is a jmlist parser callback that inserts
+   name-value pairs in text form into the request. The param is a pointer to the raw data
+   of the request (text form).
+*/
+void _req_bin_nvl_insert_jlcb(void *ptr,void *param)
+{
+	char *req_text = (char*)param;
+	nvpair_t nvp = (nvpair_t)ptr;
+	value_format_list value_format;
+	char *value_encoded;
+	wstatus ws;
+
+	req_text = req_text + strlen(req_text); /* points now to null char */
+
+	dbgprint(MOD_MODMGR,__func__,"writing name into req_text (%p), length is %u bytes long",
+			req_text,nvp->name_size);
+
+	memcpy(req_text,nvp->name_ptr,nvp->name_size);
+	req_text[nvp->name_size] = '\0';
+
+	dbgprint(MOD_MODMGR,__func__,"copied name into req_text successfully");
+
+	if( !nvp->value_size ) {
+		req_text[nvp->name_size] = ' ';
+		req_text[nvp->name_size + 1] = '\0';
+		return;
+	}
+
+	ws = _nvp_value_format(nvp->value_ptr,nvp->value_size,&value_format);
+
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"nvp_value_format function failed");
+		return;
+	}
+	dbgprint(MOD_MODMGR,__func__,"value format appropriate for this value is %d",value_format);
+
+	/* convert the value to the correct format if it requires any */
+
+	req_text += nvp->name_size;
+	*req_text = '=';
+	req_text++;
+
+	switch( value_format ) 
+	{
+		case VALUE_FORMAT_UNQUOTED:
+			dbgprint(MOD_MODMGR,__func__,"writing value into req_text (%p), length is %u bytes long",
+					req_text,nvp->value_size);
+			memcpy(req_text,nvp->value_ptr,nvp->value_size);
+			req_text[nvp->value_size] = ' ';
+			req_text[nvp->value_size + 1] = '\0';
+			return;
+		case VALUE_FORMAT_QUOTED:
+			*req_text = '"';
+			dbgprint(MOD_MODMGR,__func__,"writing value into req_text (%p), length is %u bytes long",
+					req_text,nvp->value_size);
+			memcpy(req_text+1,nvp->value_ptr,nvp->value_size);
+			req_text += nvp->value_size + 1;
+			*req_text = '"';
+			req_text++;
+			*req_text = ' ';
+			req_text++;
+			*req_text = '\0';
+			return;
+		case VALUE_FORMAT_ENCODED:
+			/* write encoded value prefix */
+			*(req_text-1) = '#';
+
+			/* convert the value to a good format */
+			ws = _nvp_value_encode(nvp->value_ptr,nvp->value_size,&value_encoded);
+			if( ws != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"unable to convert value to encoded format");
+				return;
+			}
+			strcpy(req_text,value_encoded);
+			return;
+		default:
+			dbgprint(MOD_MODMGR,__func__,"invalid or unsupported value format (%d)",value_format);
+			return;
+	}
+}
+
+
+/*
+   _req_from_bin_to_text
+
+   Helper function to convert a request in binary form to text form. This function will be useful
+   when modmgr is forwarding a request from a DCR module to a module that is remote.
+
+   Actually its much easier to convert a request from binary to text form.
+*/
+wstatus
+_req_from_bin_to_text(request_t req,request_t *req_text)
+{
+	request_t req_ptr;
+	char req_id[REQIDSIZE+1];
+	char req_type[REQTYPESIZE+1];
+	char req_src[REQMODSIZE+1];
+	char req_dst[REQMODSIZE+1];
+	char req_code[REQCODESIZE+1];
+	int req_size = 0;
+	int nvl_size = 0;
+	unsigned int nv_count = 0;
+	jmlist_status jmls;
+	char *aux;
+
+	dbgprint(MOD_MODMGR,__func__,"called with req=%p, req_text=%p",req,req_text);
+
+	/* validate arguments */
+
+	if( !req ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid req argument (req=0)");
+		goto return_fail;
+	}
+
+	if( !req_text ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid req_text argument (req_text=0)");
+		goto return_fail;
+	}
+
+	if( req->stype != REQUEST_STYPE_BIN ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid request to be used with this function");
+		goto return_fail;
+	}
+
+	/* we need to calculate the request size, because the data structure for it in text form
+	   should contain all the request in text form. */
+
+	if( req->data.bin.id > MAXREQID ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) request id exceeds the limit (%d)",req,MAXREQID);
+		goto return_fail;
+	}
+
+	if( !snprintf(req_id,sizeof(req_id),"%u",req->data.bin.id) ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to convert request id to string",req);
+		goto return_fail;
+	}
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) id length in chars is %d",req,strlen(req_id));
+	req_size += strlen(req_id);
+
+	if( req->data.bin.type == REQUEST_TYPE_REQUEST ) {
+		/* request type is request, dont use any char in TYPE token */
+		req_type[0] = '\0';
+	} else if ( req->data.bin.type == REQUEST_TYPE_REPLY ) {
+		/* request type is reply */
+		req_type[0] = 'R';
+		req_type[1] = '\0';
+	} else {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) invalid or unexpected request type",req);
+		goto return_fail;
+	}
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) type length in chars is %d",req,strlen(req_type));
+	req_size += strlen(req_type);
+
+	/* request source, destination and code arrays in binary request don't count with the null
+	   char in the end if their lenghts are at maximum, take care of that by copying to a larger
+	   array and cat'ing a null char in the end. */
+	memcpy(req_src,req->data.bin.src,sizeof(req_src)-1);
+	memcpy(req_dst,req->data.bin.dst,sizeof(req_dst)-1);
+	memcpy(req_code,req->data.bin.code,sizeof(req_code)-1);
+	req_src[REQMODSIZE] = '\0';
+	req_dst[REQMODSIZE] = '\0';
+	req_code[REQCODESIZE] = '\0';
+
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) source, destination and code length in chars is %d",
+			req, strlen(req_src) + strlen(req_dst) + strlen(req_code));
+
+	req_size += strlen(req_src) + strlen(req_dst) + strlen(req_code);
+	
+	/* take care of nv-pairs */
+
+	jmls = jmlist_entry_count(req->data.bin.nvl,&nv_count);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) jmlist_entry_count failed with jmls=%d",req,jmls);
+		goto return_fail;
+	}
+
+	if( !nv_count )
+		goto skip_nvl_size;
+
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) this request has %d nv-pair(s)",req,nv_count);
+
+	/* count the SEP between CODE and NVL */
+	req_size += 1;
+
+	jmls = jmlist_parse(req->data.bin.nvl,_req_bin_nvl_sum_length_jlcb,&nvl_size);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to parse nvpair list (length)",req);
+		goto return_fail;
+	}
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) nvlist calculated size is %d bytes long",req,nvl_size);
+	req_size += nvl_size;
+
+	/* decrement one space, the last one */
+	req_size -= 1;
+
+skip_nvl_size:
+
+	/* ok, now, for the header, we need to include the separator chars (spaces)
+	   in the request size. ID.T SRC DST CODE[ NVL..] */
+
+	req_size += 3;
+
+	/* plus the space and null char */
+	req_size += 1 + 1;
+
+	req_ptr = (request_t)malloc(sizeof(struct _request_t) + req_size);
+	memset(req_ptr,0,sizeof(struct _request_t) + req_size);
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) allocated a new request ptr=%p",req,req_ptr);
+
+	req_ptr->stype = REQUEST_STYPE_TEXT;
+
+	if( !snprintf(req_ptr->data.text.raw,req_size,"%s%s %s %s %s",req_id,req_type,req_src,req_dst,req_code) )
+	{
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to fill new request text data",req);
+		goto return_fail;
+	}
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) request head was built \"%s\"",req,req_ptr->data.text.raw);
+
+	if( !nv_count )
+		goto skip_nvl_insert;
+
+	/* NVL INSERT HERE */
+
+	strcat(req_ptr->data.text.raw," ");
+
+	jmls = jmlist_parse(req->data.bin.nvl,_req_bin_nvl_insert_jlcb,
+			req_ptr->data.text.raw + strlen(req_ptr->data.text.raw) );
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		/* this would be odd since we've already used the parser before in this function */
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to parse nvpair list (insert)",req);
+		goto return_fail;
+	}
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) finished insertion of %u nv-pairs",req,nv_count);
+
+	/* finish insertion of nv-pairs cut the last space */
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) removing trail space character",req);
+	if( (aux = strrchr(req_ptr->data.text.raw,' ')) )
+		*aux = '\0';
+
+skip_nvl_insert:
+
+	*req_text = req_ptr;
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) updated req_text to %p",req,*req_text);
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+
+return_fail:
+
+	if( req_ptr ) {
+		free(req_ptr);
+	}
+
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+wstatus
+_req_from_pipe_to_text(request_t req,request_t *req_text)
+{
+	return WSTATUS_UNIMPLEMENTED;
+}
+
+/*
+   _req_diff
+
+   Helper function to dump request differences, usefull for request conversion
+   functions testing. Requests must be of the same type.
+*/
+wstatus
+_req_diff(request_t req1_ptr,char *req1_label,request_t req2_ptr,char *req2_label)
+{
+	char aux_buf1[20] = {'\0'};
+	char aux_buf2[20] = {'\0'};
+	char reqmod1[REQMODSIZE+1] = {'\0'};
+	char reqmod2[REQMODSIZE+1] = {'\0'};
+	char reqcode1[REQCODESIZE+1] = {'\0'};
+	char reqcode2[REQCODESIZE+1] = {'\0'};
+	nvpair_t nvp1,nvp2;
+	unsigned int nvcount1,nvcount2;
+	jmlist_index nv_idx;
+
+	assert(req1_ptr);
+	assert(req1_label);
+	assert(req2_ptr);
+	assert(req2_label);
+	assert(req1_ptr->stype == req2_ptr->stype);
+
+	printf("                | %20s | %20s\n",req1_label,req2_label);
+	switch(req1_ptr->stype)
+	{
+		case REQUEST_STYPE_TEXT:
+			strncpy(aux_buf1,req1_ptr->data.text.raw,sizeof(aux_buf1)-1);
+			strncpy(aux_buf2,req2_ptr->data.text.raw,sizeof(aux_buf2)-1);
+	printf("       raw text | %20s | %20s\n",aux_buf1,aux_buf2); 
+			break;
+		case REQUEST_STYPE_BIN:
+			
+			if( req1_ptr->data.bin.type != req2_ptr->data.bin.type ) {
+	printf("           type | %20s | %20s\n",
+			rtype_str(req1_ptr->data.bin.type),rtype_str(req2_ptr->data.bin.type) );
+			} else
+	printf("           type | EQUAL\n");
+
+			if( req1_ptr->data.bin.id != req2_ptr->data.bin.id ) {
+	printf("             id | %20d | %20d\n",req1_ptr->data.bin.id,req1_ptr->data.bin.id);
+			} else
+	printf("             id | EQUAL\n");
+
+		memcpy(reqmod1,req1_ptr->data.bin.src,REQMODSIZE);
+		memcpy(reqmod2,req2_ptr->data.bin.src,REQMODSIZE);
+			if( strcmp(reqmod1,reqmod2) ) {
+	printf("         source | %20s | %20s\n",reqmod1,reqmod2);
+			} else
+	printf("         source | EQUAL\n");
+
+		memcpy(reqmod1,req1_ptr->data.bin.dst,REQMODSIZE);
+		memcpy(reqmod2,req2_ptr->data.bin.dst,REQMODSIZE);
+
+			if( strcmp(reqmod1,reqmod2) ) {
+	printf("        destiny | %20s | %20s\n",reqmod1,reqmod2);
+			} else
+	printf("        destiny | EQUAL\n");
+
+		memcpy(reqcode1,req1_ptr->data.bin.code,REQCODESIZE);
+		memcpy(reqcode2,req2_ptr->data.bin.code,REQCODESIZE);
+
+			if( strcmp(reqcode1,reqcode2) ) {
+	printf("           code | %20s | %20s\n",reqcode1,reqcode2);
+			} else
+	printf("           code | EQUAL\n");
+
+			/* process nvpairs */
+
+			jmlist_entry_count(req1_ptr->data.bin.nvl,&nvcount1);
+			jmlist_entry_count(req2_ptr->data.bin.nvl,&nvcount2);
+
+			if( nvcount1 != nvcount2 ) {
+	printf("        nvcount | %20u | %20u\n",nvcount1,nvcount2);
+			} else
+	printf("        nvcount | EQUAL (%u)\n",nvcount1);
+
+			for( nv_idx = 0 ; nv_idx < MAX(nvcount1,nvcount2) ; nv_idx++ )
+			{
+	printf("   name %02u      | ",nv_idx);
+				if( nv_idx < nvcount1 ) {
+					jmlist_get_by_index(req1_ptr->data.bin.nvl,nv_idx,(void*)&nvp1);
+					strncpy(aux_buf1,nvp1->name_ptr,sizeof(aux_buf1)-1);
+					printf("%20s ",aux_buf1);
+				} else printf("%20s "," ");
+
+				printf("| ");
+
+				if( nv_idx < nvcount2 ) {
+					jmlist_get_by_index(req1_ptr->data.bin.nvl,nv_idx,(void*)&nvp2);
+					strncpy(aux_buf1,nvp2->name_ptr,sizeof(aux_buf1)-1);
+					printf("%20s ",aux_buf1);
+				} else printf("%20s "," ");
+
+				printf("\n");
+
+	printf("   name %02u size | ",nv_idx);
+				if( nv_idx < nvcount1 )
+					printf("%20u ",nvp1->name_size);
+				else
+					printf("%20s "," ");
+
+				printf("| ");
+
+				if( nv_idx < nvcount2 )
+					printf("%20u ",nvp2->name_size);
+				else
+					printf("%20s "," ");
+
+				printf("\n");
+
+	printf("  value %02u      | ",nv_idx);
+				if( (nv_idx < nvcount1) && nvp1->value_size ) {
+					strncpy(aux_buf1,nvp1->value_ptr,MIN(sizeof(aux_buf1)-1,nvp1->value_size));
+					printf("%20s ",aux_buf1);
+				} else printf("%20s "," ");
+
+				printf("| ");
+
+				if( (nv_idx < nvcount2) && nvp2->value_size ) {
+					strncpy(aux_buf1,nvp1->value_ptr,MIN(sizeof(aux_buf1)-1,nvp1->value_size));
+					printf("%20s ",aux_buf1);
+				} else printf("%20s "," ");
+
+				printf("\n");
+
+	printf("  value %02u size | ",nv_idx);
+				if( nv_idx < nvcount1 )
+					printf("%20u ",nvp1->value_size);
+				else
+					printf("%20s "," ");
+
+				printf("| ");
+
+				if( nv_idx < nvcount2 )
+					printf("%20u ",nvp2->value_size);
+				else
+					printf("%20s "," ");
+
+				printf("\n");
+
+			}
+		break;
+		case REQUEST_STYPE_PIPE:
+			break;
+		default:
+			break;
+	}
+	return WSTATUS_SUCCESS;
+}
+
+/*
+   _req_from_string
+
+   Helper function that builds a TEXT type request from a string.
+   The string should contain all the request, this string pointer
+   wont be referenced in the request so the client code might free it.
+*/
+wstatus
+_req_from_string(const char *raw_text,request_t *req_text)
+{
+	request_t req = 0;
+	size_t req_size;
+
+	dbgprint(MOD_MODMGR,__func__,"called with raw_text=%p, req_text=%p",raw_text,req_text);
+
+	if( !raw_text ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid raw_text argument (raw_text=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !req_text ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid req_text argument (req_text=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	req_size = strlen(raw_text) + sizeof(struct _request_t) + 1;
+	req = (request_t)malloc(req_size);
+	if( !req ) {
+		dbgprint(MOD_MODMGR,__func__,"malloc failed for size %d",req_size);
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"allocated request memory successfully (ptr=%p)",req);
+	memset(req,0,req_size);
+	req->stype = REQUEST_STYPE_TEXT;
+	strcpy(req->data.text.raw,raw_text);
+
+	*req_text = req;
+	dbgprint(MOD_MODMGR,__func__,"updated req_text value to %p",*req_text);
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+
+/*
+return_fail:
+	if( req )
+		free(req);
+
+	DBGRET_FAILURE(MOD_MODMGR); */
 }
 

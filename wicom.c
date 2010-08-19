@@ -198,23 +198,39 @@ return_wch:
 
 void request_test(void)
 {
-	request_t req_text;
-	request_t req_bin;
-	//char *req_raw = "123 modFrom modTo reqCode name1=value1 name2=\"value2\" name3=value3";
-	char *req_raw = "123 modFrom modTo reqCode";
+	request_t req_text1,req_text2,req_text3;
+	request_t req_text1B,req_text2B,req_text3B;
+	request_t req_bin1,req_bin2,req_bin3;
+	request_t req_bin1T,req_bin2T,req_bin3T;
+//	char *req_raw = "123 modFrom modTo reqCode";
+	char *req_raw1 = "123 modFrom modTo reqCode name1=value1 name2=\"value2 with spaces\" name3=value3";
+	char *req_raw2 = "123 modFrom modTo reqCode";
+	char *req_raw3 = "123 modFrom modTo reqCode name1=\"LALA LELE\" name2=VALUE2XXPTO name3";
 
 	struct _jmlist_init_params init = { .flags = 0, .fverbose = 0, .fdump = stdout, .fdebug = 0 };
 
 	jmlist_initialize(&init);
 
-	req_text = (request_t)malloc(sizeof(struct _request_t) + strlen(req_raw) + 1);
-	memset(req_text,0,sizeof(struct _request_t) + strlen(req_raw) + 1);
-	strcpy(req_text->data.text.raw,req_raw);
-	req_text->stype = REQUEST_STYPE_TEXT;
+	_req_from_string(req_raw1,&req_text1);
+	_req_from_string(req_raw2,&req_text2);
+	_req_from_string(req_raw3,&req_text3);
+/*
+	_req_to_bin(req_text1,&req_bin1);
+	_req_to_text(req_bin1,&req_text1B);
+	_req_to_bin(req_text1B,&req_bin1T);
+	_req_diff(req_bin1,"req_bin1",req_bin1T,"req_bin1T");
 
-	_req_to_bin(req_text,&req_bin);
-
-	_req_dump(req_bin);
+	_req_to_bin(req_text2,&req_bin2);
+	_req_to_text(req_bin2,&req_text2B);
+	_req_to_bin(req_text2B,&req_bin2T);
+	_req_diff(req_bin2,"req_bin2",req_bin2T,"req_bin2T");
+*/
+	_req_to_bin(req_text3,&req_bin3);
+	_req_dump(req_bin3);
+	_req_to_text(req_bin3,&req_text3B);
+	_req_dump(req_text3B);
+	_req_to_bin(req_text3B,&req_bin3T);
+	_req_diff(req_bin3,"req_bin3",req_bin3T,"req_bin3T");
 
 	jmlist_uninitialize();
 	return;
