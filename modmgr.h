@@ -189,10 +189,6 @@
 #define REQMODSIZE 64
 #define REQCODESIZE 64
 
-#ifdef req
-#error AAAAAAAA
-#endif
-
 typedef enum _request_stype_list {
 	REQUEST_STYPE_BIN,
 	REQUEST_STYPE_PIPE,
@@ -251,6 +247,7 @@ typedef struct _request_t {
 	/* don't add fields below data.. */
 } *request_t;
 
+#define NVP_ENCODED_PREFIX '#'
 #define rtype_str(x) (x == REQUEST_TYPE_REQUEST ? "REQUEST" : "REPLY")
 #define V_RIDCHAR(x) isdigit(x)
 #define V_MODCHAR(x) isalnum(x)
@@ -258,7 +255,7 @@ typedef struct _request_t {
 #define V_TOKSEPCHAR(x) (x == ' ')
 #define V_REPLYCHAR(x) ( (x == 'R') || (x == 'r') )
 #define V_NAMECHAR(x) isalnum(x)
-#define V_ENCPREFIX(x) (x == '#')
+#define V_ENCPREFIX(x) (x == NVP_ENCODED_PREFIX)
 #define V_NVSEPCHAR(x) (x == '=')
 #define V_REQENDCHAR(x) (x == '\0')
 #define V_VALUECHAR(x) (isalnum(x) || (x == '.') || (x == ':') || (x == '_') || (x == '-')) 

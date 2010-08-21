@@ -26,6 +26,7 @@
 #include "jmlist.h"
 #include <ctype.h>
 #include <assert.h>
+#include "wchannel.h"
 
 typedef enum _text_token_t {
 	TEXT_TOKEN_ID,
@@ -35,6 +36,17 @@ typedef enum _text_token_t {
 	TEXT_TOKEN_CODE,
 	TEXT_TOKEN_NVL
 } text_token_t;
+
+/*
+   This structure contains interface objects used between the
+   request processor thread and the modmgr module.
+*/
+typedef struct _request_proc_data_t
+{
+	bool unload_flag;
+	bool processor_initialized;
+	wchannel_t recv_pipe;
+} request_proc_data_t;
 
 wstatus _req_from_text_to_bin(request_t req,request_t *req_bin);
 wstatus _req_from_pipe_to_bin(request_t req,request_t *req_bin);
@@ -768,6 +780,7 @@ _req_nv_value_info(char *value_ptr,char **value_start,char **value_end,uint16_t 
 	} else if( V_ENCPREFIX(value_ptr[0]) ) {
 		/* this is an encoded value */
 		encoded = true;
+		i = 1;
 	}
 
 	for( ; ; i++ )
@@ -1155,7 +1168,12 @@ _nvp_value_decoded_size(const char *value_ptr,const uint16_t value_size,unsigned
 		DBGRET_FAILURE(MOD_MODMGR);
 	}
 
-	*decoded_size = 2*value_size;
+	if( !(value_size & 1) ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid value_size (odd number expected)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	*decoded_size = (value_size - 1)/2;
 	dbgprint(MOD_MODMGR,__func__,"updated decoded_size value to %u",*decoded_size);
 
 	DBGRET_SUCCESS(MOD_MODMGR);
@@ -1176,12 +1194,13 @@ _nvp_value_decode(const char *value_ptr,const uint16_t value_size,char *decoded_
 	dbgprint(MOD_MODMGR,__func__,"called with value_ptr=%p, value_size=%u, decoded_ptr=%p, decoded_size=%u",
 			value_ptr,value_size,decoded_ptr,decoded_size);
 
-	if( value_size && 1 ) {
-		dbgprint(MOD_MODMGR,__func__,"value is invalid for decoding, value_size should be even");
+	if( !(value_size & 1) ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid value_size (odd number expected)");
 		DBGRET_FAILURE(MOD_MODMGR);
 	}
 
-	for( i = 0, j = 0 ; i < value_size ; i+= 2 )
+	/* i starts at 1 to skip the ENCPREFIXCHAR */
+	for( i = 1, j = 0 ; i < value_size ; i+= 2 )
 	{
 		hex_str[0] = value_ptr[i];
 		hex_str[1] = value_ptr[i+1];
@@ -1489,9 +1508,48 @@ void _req_dump_header(uint16_t id,request_type_list type,char *mod_src,char *mod
 			mod_src,mod_dst,req_code);
 }
 
+/*
+   _nvp_print_value
+
+   Helper function to print the value of a nvpair. Values can contain special chars or even unprintable
+   characters. This function supports different printing formats.
+*/
+void _nvp_print_value(const char *value_ptr, unsigned int value_size)
+{
+	unsigned int i;
+
+	for( i = 0 ; i < value_size ; i++ )
+	{
+		if( isprint(value_ptr[i]) )
+			putchar(value_ptr[i]);
+		else
+			putchar('?');
+	}
+
+	return;
+}
+
+/*
+   _req_dump_nvp
+
+   Helper function to dump a single nvpair. Remember that name_ptr and value_ptr need not to be
+   null terminated, thats why this functions prints char by char.
+*/
 void _req_dump_nvp(char *name_ptr,uint16_t name_size,char *value_ptr,uint16_t value_size)
 {
-	printf("    %s=%s\n",name_ptr,value_ptr);
+	unsigned int i;
+
+	printf("    ");
+
+	for( i = 0 ; i < name_size ; i++ )
+		putchar(name_ptr[i]);
+
+	if( value_size ) {
+		printf("=");
+		_nvp_print_value(value_ptr,value_size);
+	}
+
+	printf("\n");
 }
 
 wstatus
@@ -1779,12 +1837,19 @@ _nvp_value_encode(const char *value_ptr,const unsigned int value_size,char **val
 	dbgprint(MOD_MODMGR,__func__,"called with value_ptr=%p, value_size=%u, value_encoded=%p",
 			value_ptr,value_size,value_encoded);
 
-	aux_ptr = (char*)malloc(sizeof(char)*value_size*2 + sizeof(char));
+	aux_ptr = (char*)malloc(sizeof(char)*value_size*2 + 2*sizeof(char));
 	if( !aux_ptr ) {
-		dbgprint(MOD_MODMGR,__func__,"malloc failed (size=%d)",sizeof(char)*value_size*2 + sizeof(char));
+		dbgprint(MOD_MODMGR,__func__,"malloc failed (size=%d)",sizeof(char)*value_size*2 + 2*sizeof(char));
 		goto return_fail;
 	}
+	dbgprint(MOD_MODMGR,__func__,"allocated buffer successfully (ptr=%p)",aux_ptr);
+
 	*value_encoded = aux_ptr;
+
+	dbgprint(MOD_MODMGR,__func__,"inserting encoded prefix");
+
+	*aux_ptr = NVP_ENCODED_PREFIX;
+	aux_ptr++;
 
 	dbgprint(MOD_MODMGR,__func__,"starting the conversion of %d bytes",value_size);
 	for( i = 0 ; i < value_size ; i++ )
@@ -1875,16 +1940,16 @@ void _req_bin_nvl_insert_jlcb(void *ptr,void *param)
 			*req_text = '\0';
 			return;
 		case VALUE_FORMAT_ENCODED:
-			/* write encoded value prefix */
-			*(req_text-1) = '#';
-
 			/* convert the value to a good format */
 			ws = _nvp_value_encode(nvp->value_ptr,nvp->value_size,&value_encoded);
 			if( ws != WSTATUS_SUCCESS ) {
 				dbgprint(MOD_MODMGR,__func__,"unable to convert value to encoded format");
 				return;
 			}
-			strcpy(req_text,value_encoded);
+			req_text = stpcpy(req_text,value_encoded);
+			*req_text = ' ';
+			*(req_text+1) = '\0';
+			free(value_encoded);
 			return;
 		default:
 			dbgprint(MOD_MODMGR,__func__,"invalid or unsupported value format (%d)",value_format);
@@ -2153,10 +2218,11 @@ _req_diff(request_t req1_ptr,char *req1_label,request_t req2_ptr,char *req2_labe
 
 			for( nv_idx = 0 ; nv_idx < MAX(nvcount1,nvcount2) ; nv_idx++ )
 			{
-	printf("   name %02u      | ",nv_idx);
+	printf("        name %02u | ",nv_idx);
 				if( nv_idx < nvcount1 ) {
 					jmlist_get_by_index(req1_ptr->data.bin.nvl,nv_idx,(void*)&nvp1);
-					strncpy(aux_buf1,nvp1->name_ptr,sizeof(aux_buf1)-1);
+					memset(aux_buf1,0,sizeof(aux_buf1));
+					memcpy(aux_buf1,nvp1->name_ptr,MIN(nvp1->name_size,sizeof(aux_buf1)-1));
 					printf("%20s ",aux_buf1);
 				} else printf("%20s "," ");
 
@@ -2164,13 +2230,14 @@ _req_diff(request_t req1_ptr,char *req1_label,request_t req2_ptr,char *req2_labe
 
 				if( nv_idx < nvcount2 ) {
 					jmlist_get_by_index(req1_ptr->data.bin.nvl,nv_idx,(void*)&nvp2);
-					strncpy(aux_buf1,nvp2->name_ptr,sizeof(aux_buf1)-1);
+					memset(aux_buf1,0,sizeof(aux_buf1));
+					memcpy(aux_buf1,nvp2->name_ptr,MIN(nvp2->name_size,sizeof(aux_buf1)-1));
 					printf("%20s ",aux_buf1);
 				} else printf("%20s "," ");
 
 				printf("\n");
 
-	printf("   name %02u size | ",nv_idx);
+	printf("           size | ");
 				if( nv_idx < nvcount1 )
 					printf("%20u ",nvp1->name_size);
 				else
@@ -2185,22 +2252,23 @@ _req_diff(request_t req1_ptr,char *req1_label,request_t req2_ptr,char *req2_labe
 
 				printf("\n");
 
-	printf("  value %02u      | ",nv_idx);
+	printf("       value %02u | ",nv_idx);
 				if( (nv_idx < nvcount1) && nvp1->value_size ) {
-					strncpy(aux_buf1,nvp1->value_ptr,MIN(sizeof(aux_buf1)-1,nvp1->value_size));
+					memset(aux_buf1,0,sizeof(aux_buf1));
+					memcpy(aux_buf1,nvp2->value_ptr,MIN(nvp2->value_size,sizeof(aux_buf1)-1));
 					printf("%20s ",aux_buf1);
 				} else printf("%20s "," ");
 
 				printf("| ");
 
 				if( (nv_idx < nvcount2) && nvp2->value_size ) {
-					strncpy(aux_buf1,nvp1->value_ptr,MIN(sizeof(aux_buf1)-1,nvp1->value_size));
+					strncpy(aux_buf1,nvp1->value_ptr,sizeof(aux_buf1)-1);
 					printf("%20s ",aux_buf1);
 				} else printf("%20s "," ");
 
 				printf("\n");
 
-	printf("  value %02u size | ",nv_idx);
+	printf("           size | ");
 				if( nv_idx < nvcount1 )
 					printf("%20u ",nvp1->value_size);
 				else
@@ -2273,5 +2341,20 @@ return_fail:
 		free(req);
 
 	DBGRET_FAILURE(MOD_MODMGR); */
+}
+
+void _request_processor_thread(void *param)
+{
+	request_proc_data_t *proc_data = (request_proc_data_t*)param;
+
+	dbgprint(MOD_MODMGR,__func__,"called with param=%p");
+
+	if( !param ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid param argument (param=0)");
+		return;
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"returning.");
+	return;
 }
 
