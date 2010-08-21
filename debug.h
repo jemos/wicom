@@ -32,7 +32,7 @@ typedef enum _debug_mod_t {
 	MOD_WOPENGL = 2,
 	MOD_CONSOLE = 4,
 	MOD_MAPMGR = 8,
-	MOD_APMGR = 16,
+	MOD_REQBUF = 16,
 	MOD_MODMGR = 32,
 	MOD_DEBUG = 64,
 	MOD_WTHREAD = 128,

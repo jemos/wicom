@@ -31,7 +31,7 @@ modname modname_list[] = {
 	{MOD_WOPENGL,"wopengl"},
 	{MOD_CONSOLE,"console"},
 	{MOD_MAPMGR,"mapmgr"},
-	{MOD_APMGR,"apmgr"},
+	{MOD_REQBUF,"reqbuf"},
 	{MOD_MODMGR,"modmgr"},
 	{MOD_DEBUG,"debug"},
 	{MOD_WTHREAD,"wthread"},

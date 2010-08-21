@@ -33,6 +33,7 @@
 #include "wview.h"
 #include "wchannel.h"
 #include "modmgr.h"
+#include "reqbuf.h"
 
 double vtest = 50.0;
 
@@ -198,14 +199,15 @@ return_wch:
 
 void request_test(void)
 {
-	request_t req_text1,req_text2,req_text3;
-	request_t req_text1B,req_text2B,req_text3B;
-	request_t req_bin1,req_bin2,req_bin3;
-	request_t req_bin1T,req_bin2T,req_bin3T;
+	request_t req_text1,req_text2,req_text3,req_text4;
+	request_t req_text1B,req_text2B,req_text3B,req_text4B;
+	request_t req_bin1,req_bin2,req_bin3,req_bin4;
+	request_t req_bin1T,req_bin2T,req_bin3T,req_bin4T;
 //	char *req_raw = "123 modFrom modTo reqCode";
 	char *req_raw1 = "123 modFrom modTo reqCode name1=value1 name2=\"value2 with spaces\" name3=value3";
 	char *req_raw2 = "123 modFrom modTo reqCode";
 	char *req_raw3 = "123 modFrom modTo reqCode name1=\"LALA LELE\" name2=VALUE2XXPTO name3";
+	char *req_raw4 = "456 fromXpto toXtpo reqCODE nvpname1=#6566672A686970 name2=\"lala lele\"";
 
 	struct _jmlist_init_params init = { .flags = 0, .fverbose = 0, .fdump = stdout, .fdebug = 0 };
 
@@ -214,7 +216,8 @@ void request_test(void)
 	_req_from_string(req_raw1,&req_text1);
 	_req_from_string(req_raw2,&req_text2);
 	_req_from_string(req_raw3,&req_text3);
-/*
+	_req_from_string(req_raw4,&req_text4);
+
 	_req_to_bin(req_text1,&req_bin1);
 	_req_to_text(req_bin1,&req_text1B);
 	_req_to_bin(req_text1B,&req_bin1T);
@@ -224,7 +227,7 @@ void request_test(void)
 	_req_to_text(req_bin2,&req_text2B);
 	_req_to_bin(req_text2B,&req_bin2T);
 	_req_diff(req_bin2,"req_bin2",req_bin2T,"req_bin2T");
-*/
+
 	_req_to_bin(req_text3,&req_bin3);
 	_req_dump(req_bin3);
 	_req_to_text(req_bin3,&req_text3B);
@@ -232,7 +235,122 @@ void request_test(void)
 	_req_to_bin(req_text3B,&req_bin3T);
 	_req_diff(req_bin3,"req_bin3",req_bin3T,"req_bin3T");
 
+	_req_to_bin(req_text4,&req_bin4);
+	_req_dump(req_bin4);
+	_req_to_text(req_bin4,&req_text4B);
+	_req_dump(req_text4B);
+	_req_to_bin(req_text4B,&req_bin4T);
+	_req_diff(req_bin4,"req_bin4",req_bin4T,"req_bin4T");
+
 	jmlist_uninitialize();
+	return;
+}
+
+wstatus reqbuf_read1(void *param,void *buffer_ptr,unsigned int buffer_size,unsigned int *buffer_used)
+{
+	static int state = 0;
+	char req_text1[] = {"123 modFrom modTo"};
+	char req_text2[] = {" reqCode\0" "456 modFrom modTo reqCode"};
+	char req_text3[] = {" name1=\"LALA LELE\" name2=VALUE2XXPTO name3\0"};
+
+	switch(state)
+	{
+		case 0:
+		memcpy(buffer_ptr,req_text1,sizeof(req_text1)-1);
+		*buffer_used = sizeof(req_text1)-1;
+		state++;
+		break;
+		case 1:
+		memcpy(buffer_ptr,req_text2,sizeof(req_text2)-1);
+		*buffer_used = sizeof(req_text2)-1;
+		state++;
+		break;
+		case 2:
+		memcpy(buffer_ptr,req_text3,sizeof(req_text3)-1);
+		*buffer_used = sizeof(req_text3)-1;
+		state++;
+		break;
+		default:
+		*buffer_used = 0;
+	}
+
+	return WSTATUS_SUCCESS;
+}
+
+/* This read function breaks a request list of 3 requests into 4 chunks. */
+#define REQREAD2_DIV 4
+#define REQREAD2_CHUNK sizeof(struct _request_t)*3/REQREAD2_DIV
+wstatus reqbuf_read2(void *param,void *buffer_ptr,unsigned int buffer_size,unsigned int *buffer_used)
+{
+	static int state = 0;
+
+	if( state == (REQREAD2_DIV) ) {
+		*buffer_used = 0;
+		return WSTATUS_SUCCESS;
+	}
+
+	memcpy(buffer_ptr,(char*)param + state*REQREAD2_CHUNK,REQREAD2_CHUNK);
+	*buffer_used = REQREAD2_CHUNK;
+
+	/* if this is the last copy, check if we've remainder bytes to copy */
+	if( ((sizeof(struct _request_t)*3) % REQREAD2_DIV) && (state == (REQREAD2_DIV-1)) )
+	{
+		memcpy((char*)buffer_ptr + REQREAD2_CHUNK,
+				(char*)param + state*REQREAD2_CHUNK + REQREAD2_CHUNK,
+				((sizeof(struct _request_t)*3) % REQREAD2_DIV) );
+		*buffer_used += ((sizeof(struct _request_t)*3) % REQREAD2_DIV);
+	}
+
+	state++;
+	return WSTATUS_SUCCESS;
+}
+
+void reqbuf_test(void)
+{
+	reqbuf_t rb;
+	request_t req;
+	request_t req_list;
+	wstatus ws;
+	char *req_raw1 = "123 modFrom modTo reqCode name1=value1 name2=\"value2 with spaces\" name3=value3";
+	request_t req1T,req1B,req1R;
+	char *req_raw2 = "123 modFrom modTo reqCode";
+	request_t req2T,req2B,req2R;
+	char *req_raw3 = "123 modFrom modTo reqCode name1=\"LALA LELE\" name2=VALUE2XXPTO name3";
+	request_t req3T,req3B,req3R;
+
+	ws = reqbuf_create(reqbuf_read1,0,REQBUF_TYPE_TEXT,&rb);
+	ws = reqbuf_read(rb,&req);
+	_req_dump(req);
+	ws = reqbuf_read(rb,&req);
+	_req_dump(req);
+	ws = reqbuf_destroy(rb);
+
+	/* create list of requests in binary stype */
+
+	_req_from_string(req_raw1,&req1T);
+	_req_to_bin(req1T,&req1B);
+	_req_from_string(req_raw2,&req2T);
+	_req_to_bin(req2T,&req2B);
+	_req_from_string(req_raw3,&req3T);
+	_req_to_bin(req3T,&req3B);
+
+	req_list = (request_t)malloc(sizeof(struct _request_t)*3);
+	memcpy(req_list,req1B,sizeof(struct _request_t));
+	memcpy(req_list+1,req2B,sizeof(struct _request_t));
+	memcpy(req_list+2,req3B,sizeof(struct _request_t));
+
+	/* create reqbuf and test it */
+	ws = reqbuf_create(reqbuf_read2,req_list,REQBUF_TYPE_BINARY,&rb);
+	ws = reqbuf_read(rb,&req1R);
+	ws = reqbuf_read(rb,&req2R);
+	ws = reqbuf_read(rb,&req3R);
+
+	_req_diff(req1B,"req1B",req1R,"req1R");
+	_req_diff(req2B,"req2B",req2R,"req2R");
+	_req_diff(req3B,"req3B",req3R,"req3R");
+
+	/* TODO: TEST REQ LIST WITH TEXT STYPE'd REQUESTS */
+
 	return;
 }
 
@@ -242,9 +360,11 @@ int main(int argc,char *argv[])
 	wview_load_t load;
 	char buffer[32];
 
-	request_test();
+	//request_test();
 
 	//wchannel_test();
+
+	reqbuf_test();
 
 	return EXIT_SUCCESS;
 
