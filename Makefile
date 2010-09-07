@@ -1,8 +1,8 @@
 CC		= gcc
-CFLAGS	= -std=c99 -c -g -Wall -pedantic -I/opt/local/include/ -I/usr/X11/include
+CFLAGS	= -std=c99 -c -g -Wall -pedantic -I/opt/local/include/ -I/usr/X11/include -fms-extensions
 LFLAGS  =
 LIBS	= -L/usr/X11/lib /opt/local/lib/libglut.dylib -lglut -lm -framework OpenGL -lpthread -lXext -lX11 -lXxf86vm -lXi
-OBJS	= wview_fglut.o wviewctl.o wicom.o debug.o jmlist.o wlock.o wthread.o wchannel.o modmgr.o
+OBJS	= wview_fglut.o wviewctl.o wicom.o debug.o jmlist.o wlock.o wthread.o wchannel.o modmgr.o wstatus.o reqbuf.o
 
 #.SUFFIXES: .o .c
 #.c.o:
@@ -37,6 +37,12 @@ wchannel.o: wchannel_linux.c wchannel.h
 
 modmgr.o: modmgr.c modmgr.h
 	$(CC) $(CFLAGS) -o modmgr.o modmgr.c
+
+wstatus.o: wstatus.c wstatus.h
+	$(CC) $(CFLAGS) -o wstatus.o wstatus.c
+	
+reqbuf.o: reqbuf.c reqbuf.h
+	$(CC) $(CFLAGS) -o reqbuf.o reqbuf.c
 
 #%.o: %.c
 #	$(CC) $(CFLAGS) -o $@ $<
