@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <assert.h>
 
 #include "wstatus.h"
 #include "debug.h"
@@ -89,5 +90,42 @@ dbgprint(debug_mod_t module,const char *func,char *fmt,...)
 	fprintf(stderr,"\n");
 	
 	return;
+}
+
+const char *z_ptr(const char *ptr)
+{
+	if( !ptr )
+		return "NULLPTR";
+
+	if( !strlen(ptr) )
+		return "NULLSIZE";
+
+	return ptr;
+}
+
+const char *array2z(const char *buf_ptr,unsigned int buf_size)
+{
+	static char *l_buf_ptr = 0;
+	static size_t l_buf_size = 0;
+
+	if( !buf_ptr ) return "NULLPTR";
+	
+	if( !l_buf_ptr ) {
+		l_buf_ptr = (char*)malloc(sizeof(char)*256);
+		l_buf_size = 256;
+	}
+
+	if( buf_size > l_buf_size ) {
+		assert(l_buf_ptr != 0);
+		free(l_buf_ptr);
+		l_buf_ptr = (char*)malloc(sizeof(char)*(buf_size+1));
+		l_buf_size = buf_size + 1;
+	}
+
+	memset(l_buf_ptr,l_buf_size,0);
+	assert(l_buf_size >= buf_size);
+	memcpy(l_buf_ptr,buf_ptr,buf_size);
+	
+	return l_buf_ptr;
 }
 

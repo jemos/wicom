@@ -54,6 +54,7 @@ typedef struct _modname {
 
 wstatus modt2name(debug_mod_t module,const char **name);
 void dbgprint(debug_mod_t module,const char *func,char *fmt,...);
-
+const char *z_ptr(const char *ptr);
+const char *array2z(const char *buf_ptr,unsigned int buf_size);
 #endif
 
