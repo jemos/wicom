@@ -215,6 +215,25 @@ typedef struct _nvpair_t
 	uint16_t value_size;
 } *nvpair_t;
 
+typedef enum _nvpair_info_flag_list
+{
+	NVPAIR_IFLAG_NOT_FOUND = 0,
+	NVPAIR_IFLAG_FOUND = 1,
+	NVPAIR_IFLAG_NAME_OVERSIZE = 2,
+	NVPAIR_IFLAG_VALUE_OVERSIZE = 4,
+	NVPAIR_IFLAG_VALUE_NOT_SET = 8,		/* name1 */
+	NVPAIR_IFLAG_VALUE_EMPTY = 16		/* name1="" or name1=# */
+} nvpair_info_flag_list;
+
+typedef struct _nvpair_info_t
+{
+	const char *name_ptr;
+	unsigned int name_size;
+	const char *value_ptr;
+	unsigned int value_size;
+	nvpair_info_flag_list flags;
+} *nvpair_info_t;
+
 typedef struct _req_data_bin {
 	request_type_list type;
 	int id;
@@ -247,6 +266,45 @@ typedef struct _request_t {
 	/* don't add fields below data.. */
 } *request_t;
 
+/* module registration data structure */
+#define MODNAMESIZE REQMODSIZE
+#define MODDESCSIZE 256
+#define MODVERSIONSIZE 32
+#define MODAUTHORSIZE 128
+#define MODEMAILSIZE 128
+#define MODHOSTSIZE 128
+#define MODPORTSIZE 32
+
+typedef enum _modreg_comm_type_list {
+	MODREG_COMM_UNDEF,
+	MODREG_COMM_DCR,
+	MODREG_COMM_SSR
+} modreg_comm_type_list;
+
+typedef void (*REQPROCESSORCALLBACK)(const request_t req);
+
+typedef struct _modreg_t {
+	struct _basic {
+		char name[MODNAMESIZE];
+		char description[MODDESCSIZE];
+		char version[MODVERSIONSIZE];
+		char author_name[MODAUTHORSIZE];
+		char author_email[MODEMAILSIZE];
+	} basic;
+	struct _communication {
+		modreg_comm_type_list type;
+		union _xpto {
+			struct _dcr {
+				REQPROCESSORCALLBACK reqproc_cb;
+			} dcr;
+			struct _ssr {
+				char host[MODHOSTSIZE];
+				char port[MODPORTSIZE];
+			} ssr;
+		} data;
+	} communication;
+} *modreg_t;
+
 #define NVP_ENCODED_PREFIX '#'
 #define rtype_str(x) (x == REQUEST_TYPE_REQUEST ? "REQUEST" : "REPLY")
 #define V_RIDCHAR(x) isdigit(x)
@@ -262,6 +320,9 @@ typedef struct _request_t {
 #define V_QVALUECHAR(x) (V_VALUECHAR(x) || (x == ' '))
 #define V_EVALUECHAR(x) (isdigit(x) || (x == 'A') || (x == 'B') || (x == 'C') || (x == 'D') || (x == 'E') || (x == 'F'))
 #define V_QUOTECHAR(x) (x == '"')
+
+#define REQERROR_DESCNAME "errorMsg"
+#define REQERROR_MODUNFOUND "Destination module %s was not found in modmgr module list."
 
 /*
     _req_to_pipe(req)
@@ -289,8 +350,13 @@ typedef enum _request_validate_result {
 	REQUEST_INVALID_VALUE
 } request_validate_result;
 
+typedef struct _modmgr_load_t {
+	char *bind_hostname;
+	char *bind_port;
+} modmgr_load_t;
+
 wstatus _nvp_alloc(uint16_t name_size,uint16_t value_size,nvpair_t *nvp);
-wstatus _nvp_fill(char *name_ptr,uint16_t name_size,void *value_ptr,uint16_t value_size,nvpair_t nvp);
+wstatus _nvp_fill(const char *name_ptr,const uint16_t name_size,const void *value_ptr,const uint16_t value_size,nvpair_t nvp);
 wstatus _nvp_free(nvpair_t nvp);
 wstatus _nvp_value_format(const char *value_ptr,const unsigned int value_size,value_format_list *value_format);
 wstatus _nvp_value_encode(const char *value_ptr,const unsigned int value_size,char **value_encoded);
@@ -306,14 +372,22 @@ wstatus _req_lookup_src(request_t req,char *src);
 wstatus _req_lookup_dst(request_t req,char *dst);
 wstatus _req_lookup_id(request_t req,uint16_t *id);
 wstatus _req_lookup_type(request_t req,request_type_list *type);
-wstatus _req_lookup_nv(request_t req,char *value_ptr,int value_size,request_lookup_result *lookup_result);
-wstatus _req_validate_nv(request_t req,char *name,char *value,request_validate_result *validate_result);
+wstatus _req_get_nv(const request_t req,const char *name_ptr,unsigned int name_size,nvpair_t *nvpp);
+wstatus _req_get_nv_count(const request_t req,unsigned int *nv_count);
+wstatus _req_get_nv_info(const request_t req,nvpair_info_t nvpi);
+wstatus _req_lookup_nv(const request_t req,const char *name_ptr,unsigned int name_size,nvpair_t *nvpp);
 wstatus _req_insert_nv(request_t req,char *name,char *value);
 wstatus _req_remove_nv(request_t req,char *name);
 wstatus _req_dump(request_t req);
 wstatus _req_diff(request_t req1_ptr,char *req1_label,request_t req2,char *req2_label);
 wstatus _req_from_string(const char *raw_text,request_t *req_text);
+wstatus _req_free(request_t req);
 
+wstatus modmgr_lookup(const char *mod_name,const struct _modreg_t **modp);
+wstatus modmgr_load(modmgr_load_t load);
+wstatus modmgr_unload(void);
+
+wstatus _request_send(const request_t req,const struct _modreg_t *mod);
 
 #ifndef MAX
 #define MAX(a,b) (a > b ? a : b)
