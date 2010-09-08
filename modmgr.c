@@ -68,9 +68,11 @@ wstatus _req_nv_name_info(char *name_ptr,char **name_end,uint16_t *name_size);
 wstatus _req_text_token_seek(const char *req_text,text_token_t token,char **token_ptr);
 wstatus _req_text_nv_parse(char *nv_ptr,char **name_start,unsigned int *name_size,char **value_start,unsigned int *value_size,value_format_list *value_format);
 wstatus _req_text_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_name_size,nvpair_t *nvpp);
+wstatus _req_text_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi);
 wstatus _req_from_bin_to_text(request_t req,request_t *req_text);
 wstatus _req_from_pipe_to_text(request_t req,request_t *req_text);
 wstatus _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_name_size,nvpair_t *nvpp);
+wstatus _req_bin_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi);
 wstatus _req_add_nvp_z(const char *name_ptr,const char *value_ptr,request_t req);
 void _modmgr_reqproc_cb(const request_t req);
 wstatus _modreg_alloc(modreg_t *new_mod);
@@ -641,7 +643,7 @@ return_fail:
    It is assumed that the request format was validated before calling this function.
 */
 wstatus
-_req_text_nv_count(request_t req,unsigned int *nvcount)
+_req_text_nv_count(const struct _request_t *req,unsigned int *nvcount)
 {
 	char *aux;
 	int state;
@@ -1744,6 +1746,9 @@ void _req_bin_nvl_sum_length_jlcb(void *ptr,void *param)
 			/* name_size + '#' + value_size + ' ' */
 			*nvl_size += nvp->name_size + 1 + value_size;
 			break;
+		case VALUE_FORMAT_UNINITIALIZED:
+			dbgprint(MOD_MODMGR,__func__,"unexpected/invalid value format (VALUE_FORMAT_UNINITIALIZED)");
+			break;
 	}
 
 	return;
@@ -2780,6 +2785,178 @@ modreg_create_from_request(request_t req,modreg_t *modreg)
 	return WSTATUS_UNIMPLEMENTED;
 }
 
+wstatus
+_modreg_validate_name(const char *name_ptr,unsigned int name_size,modreg_validation_result *result)
+{
+	unsigned int i;
+
+	dbgprint(MOD_MODMGR,__func__,"called with name_ptr=%p, name_size=%u, result=%p",
+			name_ptr,name_size,result);
+
+	if( !name_ptr ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid name_ptr argument (name_ptr=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !name_size ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid name_size argument (name_size=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !result ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid result argument (result=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	for( i = 0 ; i < name_size ; i++ )
+   	{
+		if( MRV_NAMECHAR(name_ptr[i]) )
+			continue;
+
+		dbgprint(MOD_MODMGR,__func__,"invalid/unsupported character found in module name (name[%u]=%02X)",i,name_ptr[i]);
+		*result = MODREG_PARAM_INVALID_CHARACTER_FOUND;
+		dbgprint(MOD_MODMGR,__func__,"updated result value to %s",modreg_val_str(*result));
+		DBGRET_SUCCESS(MOD_MODMGR);
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"finished parsing all name characters");
+
+	/* all characters are valid */
+	
+	*result = MODREG_PARAM_CHARACTERS_ARE_VALID;
+	dbgprint(MOD_MODMGR,__func__,"updated result value to %s",modreg_val_str(*result));
+	DBGRET_SUCCESS(MOD_MODMGR);
+}
+
+wstatus
+_modreg_validate_description(const char *description_ptr,unsigned int description_size,modreg_validation_result *result)
+{
+	unsigned int i;
+
+	dbgprint(MOD_MODMGR,__func__,"called with description_ptr=%p, description_size=%u, result=%p",
+			description_ptr,description_size,result);
+
+	if( !description_ptr ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid description_ptr argument (description_ptr=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !description_size ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid description_size argument (description_size=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !result ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid result argument (result=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	for( i = 0 ; i < description_size ; i++ )
+   	{
+		if( MRV_DESCCHAR(description_ptr[i]) )
+			continue;
+
+		dbgprint(MOD_MODMGR,__func__,"invalid/unsupported character found in module description (name[%u]=%02X)",i,description_ptr[i]);
+		*result = MODREG_PARAM_INVALID_CHARACTER_FOUND;
+		dbgprint(MOD_MODMGR,__func__,"updated result value to %s",modreg_val_str(*result));
+		DBGRET_SUCCESS(MOD_MODMGR);
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"finished parsing all description characters");
+
+	/* all characters are valid */
+	
+	*result = MODREG_PARAM_CHARACTERS_ARE_VALID;
+	dbgprint(MOD_MODMGR,__func__,"updated result value to %s",modreg_val_str(*result));
+	DBGRET_SUCCESS(MOD_MODMGR);
+}
+
+wstatus
+_modreg_validate_author_name(const char *author_name_ptr,unsigned int author_name_size,modreg_validation_result *result)
+{
+	unsigned int i;
+
+	dbgprint(MOD_MODMGR,__func__,"called with author_name_ptr=%p, author_name_size=%u, result=%p",
+			author_name_ptr,author_name_size,result);
+
+	if( !author_name_ptr ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid author_name_ptr argument (author_name_ptr=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !author_name_size ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid author_name_size argument (author_name_size=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !result ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid result argument (result=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	for( i = 0 ; i < author_name_size ; i++ )
+   	{
+		if( MRV_AUTHORNCHAR(author_name_ptr[i]) )
+			continue;
+
+		dbgprint(MOD_MODMGR,__func__,"invalid/unsupported character found in module author name (author_name[%u]=%02X)",i,author_name_ptr[i]);
+		*result = MODREG_PARAM_INVALID_CHARACTER_FOUND;
+		dbgprint(MOD_MODMGR,__func__,"updated result value to %s",modreg_val_str(*result));
+		DBGRET_SUCCESS(MOD_MODMGR);
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"finished parsing all author name characters");
+
+	/* all characters are valid */
+	
+	*result = MODREG_PARAM_CHARACTERS_ARE_VALID;
+	dbgprint(MOD_MODMGR,__func__,"updated result value to %s",modreg_val_str(*result));
+	DBGRET_SUCCESS(MOD_MODMGR);
+}
+
+wstatus
+_modreg_validate_author_email(const char *author_email_ptr,unsigned int author_email_size,modreg_validation_result *result)
+{
+	unsigned int i;
+
+	dbgprint(MOD_MODMGR,__func__,"called with author_email_ptr=%p, author_email_size=%u, result=%p",
+			author_email_ptr,author_email_size,result);
+
+	if( !author_email_ptr ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid author_email_ptr argument (author_email_ptr=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !author_email_size ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid author_email_size argument (author_email_size=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !result ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid result argument (result=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	for( i = 0 ; i < author_email_size ; i++ )
+   	{
+		if( MRV_AUTHORECHAR(author_email_ptr[i]) )
+			continue;
+
+		dbgprint(MOD_MODMGR,__func__,"invalid/unsupported character found in module author email (author_email[%u]=%02X)",i,author_email_ptr[i]);
+		*result = MODREG_PARAM_INVALID_CHARACTER_FOUND;
+		dbgprint(MOD_MODMGR,__func__,"updated result value to %s",modreg_val_str(*result));
+		DBGRET_SUCCESS(MOD_MODMGR);
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"finished parsing all author email characters");
+
+	/* all characters are valid */
+	
+	*result = MODREG_PARAM_CHARACTERS_ARE_VALID;
+	dbgprint(MOD_MODMGR,__func__,"updated result value to %s",modreg_val_str(*result));
+	DBGRET_SUCCESS(MOD_MODMGR);
+}
+
 /*
    _modreg_alloc
 
@@ -3144,7 +3321,7 @@ return_fail:
    data structure returned using _nvp_free.
 */
 wstatus
-_req_lookup_nv(const request_t req,const char *name_ptr,unsigned int name_size,nvpair_t *nvpp)
+_req_get_nv(const request_t req,const char *name_ptr,unsigned int name_size,nvpair_t *nvpp)
 {
 	wstatus ws;
 
@@ -3390,7 +3567,7 @@ return_fail:
    have any name-value pair, nv_count is set to 0 (zero).
 */
 wstatus
-_req_get_nv_count(const request_t req,unsigned int *nv_count)
+_req_get_nv_count(const struct _request_t *req,unsigned int *nv_count)
 {
 	wstatus ws;
 	jmlist_status jmls;
@@ -3428,7 +3605,7 @@ _req_get_nv_count(const request_t req,unsigned int *nv_count)
 			dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function was successful (%u)",req,entry_count);
 
 			*nv_count = entry_count;
-			dbgprint(MOD_MODMGR,__func__,"(req=%p) nv_count value updated to %u",*nv_count);
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) nv_count value updated to %u",req,*nv_count);
 			DBGRET_SUCCESS(MOD_MODMGR);
 			
 			break;	
@@ -3447,7 +3624,7 @@ _req_get_nv_count(const request_t req,unsigned int *nv_count)
 			dbgprint(MOD_MODMGR,__func__,"(req=%p) jmlist_entry_count was successful (%u)",req,entry_count);
 
 			*nv_count = entry_count;
-			dbgprint(MOD_MODMGR,__func__,"(req=%p) nv_count value updated to %u",*nv_count);
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) nv_count value updated to %u",req,*nv_count);
 			DBGRET_SUCCESS(MOD_MODMGR);
 
 			break;
@@ -3499,7 +3676,7 @@ _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_
 		DBGRET_FAILURE(MOD_MODMGR);
 	}
 
-	if( req->stype != REQUEST_STYPE_TEXT ) {
+	if( req->stype != REQUEST_STYPE_BIN ) {
 		dbgprint(MOD_MODMGR,__func__,"(req=%p) invalid request to be used with this function",req);
 		DBGRET_FAILURE(MOD_MODMGR);
 	}
@@ -3511,7 +3688,7 @@ _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_
 
 	dbgprint(MOD_MODMGR,__func__,"(req=%p) calling helper function to get name-value count",req);
 	ws = _req_get_nv_count(req,&nv_count);
-	dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function returned (ws=%s)",wstatus_str(ws));
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function returned (ws=%s)",req,wstatus_str(ws));
 	if( ws != WSTATUS_SUCCESS ) {
 		dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to get name-value count (helper function failed with ws=%s)",
 				req,wstatus_str(ws));
@@ -3541,6 +3718,13 @@ _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_
 		if( jmls != JMLIST_ERROR_SUCCESS ) {
 			dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to seek throughout the name-value list "
 					"(jmlist function failed with jmls=%d)",req,jmls);
+
+			/* need to end jmlist seeking before returning.. */
+			jmls = jmlist_seek_end(req->data.bin.nvl,&shandle);
+			if( jmls != JMLIST_ERROR_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to end jmlist seeking (jmls=%d)",req,jmls);
+			}
+
 			goto return_fail;
 		}
 
@@ -3552,7 +3736,7 @@ _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_
 					req,nv_idx);
 			goto seek_nvp;
 		}
-		dbgprint(MOD_MODMGR,__func__,"(req=%p) nvpair (idx=%u) has same length has the looking nvpair",req,nv_idx);
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) nvpair (idx=%u) has same length as the looking nvpair",req,nv_idx);
 
 		/* compare name with the lookup name */
 
@@ -3570,6 +3754,13 @@ _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_
 		if( ws != WSTATUS_SUCCESS ) {
 			dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to duplicate request nvpair (idx=%u)",req,nv_idx);
 			*nvpp = 0;
+			
+			/* need to end jmlist seeking before returning.. */
+			jmls = jmlist_seek_end(req->data.bin.nvl,&shandle);
+			if( jmls != JMLIST_ERROR_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to end jmlist seeking (jmls=%d)",req,jmls);
+			}
+
 			goto return_fail;
 		}
 		dbgprint(MOD_MODMGR,__func__,"(req=%p) nvpair duplicated successfully (nvp=%p)",req,aux_nvp);
@@ -3590,6 +3781,14 @@ _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_
 
 seek_nvp:
 		nv_idx++;
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to find the wanted nvpair",req);
+
+	/* need to end jmlist seeking before returning.. */
+	jmls = jmlist_seek_end(req->data.bin.nvl,&shandle);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to end jmlist seeking (jmls=%d)",req,jmls);
 	}
 
 	DBGRET_FAILURE(MOD_MODMGR);
@@ -3671,8 +3870,311 @@ return_fail:
    Helper function that obtains a specific nvpair informations. These informations are saved
    in a data structure that is passed by the caller, nvpair_info_t see the header file for
    more information about the information that is possible to obtain for each nvpair.
+
+   The implementation of this function is based on the code from _req_get_nv except that
+   when it finds the wanted name-value pair, it obtains the characteristics of the name-value
+   pair and saves that information into nvpi structure.
+
+   How the information is gathered? _nvp_text_... _req_nv...?
 */
-wstatus _req_get_nv_info(const request_t req,nvpair_info_t nvpi)
+wstatus _req_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi)
+{
+	wstatus ws;
+
+	dbgprint(MOD_MODMGR,__func__,"called with req=%p, nvpi=%p",req,nvpi);
+
+	/* validate arguments */
+
+	if( !req ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid req argument (req=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !nvpi ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid nvpi argument (nvpi=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !look_name_ptr ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid look_name_ptr argument (name_ptr=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !look_name_size ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid look_name_size argument (name_size=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	switch(req->stype)
+	{
+		case REQUEST_STYPE_TEXT:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) request is in text format",req);
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) calling helper function",req);
+			ws = _req_text_get_nv_info(req,look_name_ptr,look_name_size,nvpi);
+			if( ws != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to get name-value pair informations "
+						"(helper function failed with ws=%s)",req,wstatus_str(ws));
+				goto return_fail;
+			}
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function returned OK",req);
+			break;
+		case REQUEST_STYPE_BIN:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) request is in binary format",req);
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) calling helper function",req);
+			ws = _req_bin_get_nv_info(req,look_name_ptr,look_name_size,nvpi);
+			if( ws != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to get name-value pair informations "
+						"(helper function failed with ws=%s)",req,wstatus_str(ws));
+				goto return_fail;
+			}
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function returned OK",req);
+			break;
+		case REQUEST_STYPE_PIPE:
+		default:
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) request has an invalid or unsupported stype (check req pointer...)",req);
+			DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	DBGRET_SUCCESS(MOD_MODMGR);
+
+return_fail:
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+/*
+   _req_bin_get_nv_info
+
+   Helper function that obtains a specific name-value pair informations from
+   the request. This helper function will handle binary type requests specifically.
+*/
+wstatus _req_bin_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi)
+{
+	nvpair_t nvp_seek;
+	void *aux_ptr;
+	jmlist_seek_handle shandle;
+	jmlist_status jmls;
+	wstatus ws;
+	unsigned int nv_idx;
+	unsigned int nv_count;
+	unsigned int i;
+
+	dbgprint(MOD_MODMGR,__func__,"called with req=%p, look_name_ptr=%p (%s), look_name_size=%u, nvpi=%p",
+			req,look_name_ptr,z_ptr(look_name_ptr),look_name_size,nvpi);
+
+	/* validate arguments */
+
+	if( !req ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid req argument (req=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !nvpi ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid nvpi argument (nvpi=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !look_name_ptr ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid look_name_ptr argument (look_name_ptr=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( !look_name_size ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid look_name_size argument (look_name_size=0)");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	if( req->stype != REQUEST_STYPE_BIN ) {
+		dbgprint(MOD_MODMGR,__func__,"invalid request to be used with this function");
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) clearing nvpi",req);
+	nvpi->flags = NVPAIR_IFLAG_UNINITIALIZED;
+
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) calling helper function to get name-value count",req);
+	ws = _req_get_nv_count(req,&nv_count);
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function returned (ws=%s)",req,wstatus_str(ws));
+	if( ws != WSTATUS_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to get name-value count (helper function failed with ws=%s)",
+				req,wstatus_str(ws));
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) helper function was successful (nv_count=%u)",req,nv_count);
+
+	if( nv_count == 0 )
+   	{
+		/* update nvpi */
+		nvpi->flags = NVPAIR_IFLAG_NOT_FOUND;
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) updated nvpi flags to %d (NVPAIR_IFLAG_NOT_FOUND)",req,nvpi->flags);
+		DBGRET_SUCCESS(MOD_MODMGR);
+	}
+
+	/* parse all nvpair from the name-value pair list of the binary stype request */
+
+	jmls = jmlist_seek_start(req->data.bin.nvl,&shandle);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to start seek throughout the name-value list "
+				"(jmlist function failed with jmls=%d)",req,jmls);
+		DBGRET_FAILURE(MOD_MODMGR);
+	}
+
+	nv_idx = 0;
+	while( nv_count-- )
+	{
+		jmls = jmlist_seek_next(req->data.bin.nvl,&shandle,&aux_ptr);
+		if( jmls != JMLIST_ERROR_SUCCESS )
+	   	{
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to seek throughout the name-value list "
+					"(jmlist function failed with jmls=%d)",req,jmls);
+
+			jmls = jmlist_seek_end(req->data.bin.nvl,&shandle);
+			if( jmls != JMLIST_ERROR_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to end jmlist seeking (jmls=%d)",req,jmls);
+			}
+			DBGRET_FAILURE(MOD_MODMGR);
+		}
+
+		nvp_seek = (nvpair_t)aux_ptr;
+
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) testing nvpair (idx=%u) name lengths",req,nv_idx);
+		if( nvp_seek->name_size != look_name_size ) {
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) this nvpair (idx=%u) has different name size, seeking",
+					req,nv_idx);
+			goto seek_nvp;
+		}
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) nvpair (idx=%u) has same length as the looking nvpair",req,nv_idx);
+
+		/* compare name with the lookup name */
+
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) comparing nvpair (idx=%u) name characters",req,nv_idx);
+		if( memcmp(nvp_seek->name_ptr,look_name_ptr,look_name_size) ) {
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) this nvpair (idx=%u) has different name, seeking",
+					req,nv_idx);
+			goto seek_nvp;
+		}
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) nvpair was found successful in the list (idx=%u)",req,nv_idx);
+
+		/* do the cleanup */
+
+		jmls = jmlist_seek_end(req->data.bin.nvl,&shandle);
+		if( jmls != JMLIST_ERROR_SUCCESS ) {
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to end jmlist seeking (jmls=%d)",req,jmls);
+			DBGRET_FAILURE(MOD_MODMGR);
+		}
+
+		nvpi->flags = NVPAIR_IFLAG_FOUND;
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) nvpi flags set to %d (NVPAIR_IFLAG_FOUND)",req,nvpi->flags);
+
+		/* get the name-value pair informations */
+
+		if( !nvp_seek->name_ptr || !nvp_seek->name_size ) {
+			nvpi->flags |= NVPAIR_IFLAG_NAME_NOT_SET;
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) nvpi flags updated to %d (|NVPAIR_IFLAG_NAME_NOT_SET)",req,nvpi->flags);
+
+			nvpi->name_ptr = 0;
+			nvpi->name_size = 0;
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) nvpi name information updated to ptr=%p, size=%u",nvpi->name_ptr,nvpi->name_size);
+		} else
+		{
+			nvpi->name_ptr = nvp_seek->name_ptr;
+			nvpi->name_size = nvp_seek->name_size;
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) nvpi name information updated to ptr=%p, size=%u",nvpi->name_ptr,nvpi->name_size);
+
+			/* validate name characters */
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) validating name-value pair name characters",req);
+			for( i = 0 ; i < nvpi->name_size ; i++ )
+		   	{
+				if( V_NAMECHAR(nvpi->name_ptr[i]) )
+					continue;
+
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) found invalid character (%02X) at index %u",req,nvpi->name_ptr[i],i);
+				/*nvpi->flags |= NVPAIR_IFLAG_NAME_INVALID; */
+				goto name_finished;
+			}
+
+			/* all name characters are OK */
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) all name-value pair name characters are acceptable",req);
+			nvpi->flags |= NVPAIR_IFLAG_NAME_VALID;
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) updated nvpi flags to %d (|NVPAIR_IFLAG_NAME_VALID)",req,nvpi->flags);
+		}
+
+name_finished:
+
+		/* now parse the value informations */
+
+		if( !nvp_seek->value_ptr )
+		{
+			nvpi->flags |= NVPAIR_IFLAG_VALUE_NOT_SET;
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) updated nvpi flags to %d (|NVPAIR_IFLAG_VALUE_NOT_SET)",req,nvpi->flags);
+
+			nvpi->value_ptr = 0;
+			nvpi->value_size = 0;
+			nvpi->encoded_size = 0;
+			nvpi->value_format = VALUE_FORMAT_UNINITIALIZED;
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) updated nvpi value informations to ptr=%p, size=%u, encoded_size=%u, format=%d",
+					req,nvpi->value_ptr,nvpi->value_size,nvpi->encoded_size,nvpi->value_format);
+		} else if( nvp_seek->value_size )
+		{
+			/* got ptr and size */
+			nvpi->flags |= NVPAIR_IFLAG_VALUE_VALID;
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) updated nvpi flags to %d (|NVPAIR_IFLAG_VALUE_VALID)",req,nvpi->flags);
+
+			nvpi->value_ptr = nvp_seek->value_ptr;
+			nvpi->value_size = nvp_seek->value_size;
+
+			/* get encoded value informations (format and length in characters) */
+
+			ws = _nvp_value_encoded_size(nvp_seek->value_ptr,nvp_seek->value_size,&nvpi->encoded_size);
+			if( ws != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to get encoded value size "
+						"(helper function failed with ws=%s)",req,wstatus_str(ws));
+				DBGRET_FAILURE(MOD_MODMGR);
+			}
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) updated nvpi encoded value size to %u",req,nvpi->encoded_size);
+
+			ws = _nvp_value_format(nvp_seek->value_ptr,nvp_seek->value_size,&nvpi->value_format);
+			if( ws != WSTATUS_SUCCESS ) {
+				dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to get encoded value format "
+						"(helper function failed with ws=%s)",req,wstatus_str(ws));
+				DBGRET_FAILURE(MOD_MODMGR);
+			}
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) updated nvpi encoded value format to %d",req,nvpi->value_format);
+
+			/* finished processing value */
+
+		} else
+		{
+			/* value_ptr != 0 but value_size = 0... this shouldn't happen.. */
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) invalid name-pair value informations found (ptr!=0,size=0)",req);
+
+			nvpi->flags |= NVPAIR_IFLAG_VALUE_NOT_SET;
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) updated nvpi flags to %d (|NVPAIR_IFLAG_VALUE_NOT_SET)",req,nvpi->flags);
+
+			nvpi->value_ptr = 0;
+			nvpi->value_size = 0;
+			nvpi->encoded_size = 0;
+			nvpi->value_format = VALUE_FORMAT_UNINITIALIZED;
+			dbgprint(MOD_MODMGR,__func__,"(req=%p) updated nvpi value informations to ptr=%p, size=%u, encoded_size=%u, format=%d",
+					req,nvpi->value_ptr,nvpi->value_size,nvpi->encoded_size,nvpi->value_format);
+		}
+
+		DBGRET_SUCCESS(MOD_MODMGR);
+
+seek_nvp:
+		nv_idx++;
+	}
+
+	dbgprint(MOD_MODMGR,__func__,"(req=%p) unable to find the wanted nvpair (name=%s)",req,array2z(look_name_ptr,look_name_size));
+
+	jmls = jmlist_seek_end(req->data.bin.nvl,&shandle);
+	if( jmls != JMLIST_ERROR_SUCCESS ) {
+		dbgprint(MOD_MODMGR,__func__,"(req=%p) failed to end jmlist seeking (jmls=%d)",req,jmls);
+	}
+
+	DBGRET_FAILURE(MOD_MODMGR);
+}
+
+wstatus _req_text_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi)
 {
 	DBGRET_FAILURE(MOD_MODMGR);
 }
