@@ -30,8 +30,8 @@
 modname modname_list[] = {
 	{MOD_WICOM,"wicom"},
 	{MOD_WOPENGL,"wopengl"},
-	{MOD_CONSOLE,"console"},
-	{MOD_MAPMGR,"mapmgr"},
+	{MOD_REQ,"request"},
+	{MOD_NVPAIR,"nvpair"},
 	{MOD_REQBUF,"reqbuf"},
 	{MOD_MODMGR,"modmgr"},
 	{MOD_DEBUG,"debug"},
