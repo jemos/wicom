@@ -33,6 +33,8 @@
 #include "wview.h"
 #include "wchannel.h"
 #include "modmgr.h"
+#include "nvpair.h"
+#include "req.h"
 #include "reqbuf.h"
 
 double vtest = 50.0;
@@ -208,6 +210,7 @@ void request_test(void)
 	char *req_raw2 = "123 modFrom modTo reqCode";
 	char *req_raw3 = "123 modFrom modTo reqCode name1=\"LALA LELE\" name2=VALUE2XXPTO name3";
 	char *req_raw4 = "456 fromXpto toXtpo reqCODE nvpname1=#6566672A686970 name2=\"lala lele\"";
+	nvpair_t nvp;
 
 	struct _jmlist_init_params init = { .flags = 0, .fverbose = 0, .fdump = stdout, .fdebug = 0 };
 
@@ -234,6 +237,14 @@ void request_test(void)
 	_req_dump(req_text3B);
 	_req_to_bin(req_text3B,&req_bin3T);
 	_req_diff(req_bin3,"req_bin3",req_bin3T,"req_bin3T");
+
+	_req_get_nv(req_bin3,"name2",5,&nvp);
+	printf("GOT NVPAIR name2 = \"%s\"\n",array2z(nvp->value_ptr,nvp->value_size));
+
+	_req_get_nv(req_bin3T,"name1",5,&nvp);
+	printf("GOT NVPAIR name1 = \"%s\"\n",array2z(nvp->value_ptr,nvp->value_size));
+
+	_req_get_nv(req_bin3T,"nameX",5,&nvp);
 
 	_req_to_bin(req_text4,&req_bin4);
 	_req_dump(req_bin4);
@@ -360,11 +371,11 @@ int main(int argc,char *argv[])
 	wview_load_t load;
 	char buffer[32];
 
-	//request_test();
+	request_test();
 
 	//wchannel_test();
 
-	reqbuf_test();
+	//reqbuf_test();
 
 	return EXIT_SUCCESS;
 

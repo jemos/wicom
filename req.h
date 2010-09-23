@@ -107,8 +107,6 @@ typedef struct _request_t {
 #define V_CODECHAR(x) (isalnum(x) || (x == '.') || (x == '_') || (x == '-'))
 #define V_TOKSEPCHAR(x) (x == ' ')
 #define V_REPLYCHAR(x) ( (x == 'R') || (x == 'r') )
-#define V_NAMECHAR(x) isalnum(x)
-#define V_ENCPREFIX(x) (x == NVP_ENCODED_PREFIX)
 #define V_REQENDCHAR(x) (x == '\0')
 
 #define REQERROR_DESCNAME "errorMsg"
@@ -130,8 +128,8 @@ wstatus _req_from_pipe_to_bin(request_t req,request_t *req_bin);
 wstatus _req_nv_value_info(char *value_ptr,char **value_start,char **value_end,uint16_t *value_size);
 wstatus _req_nv_name_info(char *name_ptr,char **name_end,uint16_t *name_size);
 wstatus _req_text_token_seek(const char *req_text,text_token_t token,char **token_ptr);
-wstatus _req_text_nv_parse(char *nv_ptr,char **name_start,unsigned int *name_size,char **value_start,unsigned int *value_size,value_format_list *value_format);
-wstatus _req_text_nv_validate(const char *nv_ptr,nvpair_info_flag_list *nvpi_flags);
+wstatus _req_text_nv_parse(char *nv_ptr,char **name_start,unsigned int *name_size,char **value_start,unsigned int *value_size,nvpair_fflag_list *fflags);
+wstatus _req_text_nv_validate(const struct _request_t *req,nvpair_iflag_list *iflags);
 wstatus _req_text_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_name_size,nvpair_t *nvpp);
 wstatus _req_text_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi);
 wstatus _req_from_bin_to_text(request_t req,request_t *req_text);

@@ -21,6 +21,8 @@
 #ifndef _DEBUG_H
 #define _DEBUG_H
 
+#include "wstatus.h"
+
 #ifndef DEBUG_LOOPS
 #define DEBUG_LOOPS 0
 #endif
@@ -30,8 +32,8 @@
 typedef enum _debug_mod_t {
 	MOD_WICOM = 1,
 	MOD_WOPENGL = 2,
-	MOD_CONSOLE = 4,
-	MOD_MAPMGR = 8,
+	MOD_REQ = 4,
+	MOD_NVPAIR = 8,
 	MOD_REQBUF = 16,
 	MOD_MODMGR = 32,
 	MOD_DEBUG = 64,
@@ -51,6 +53,8 @@ typedef struct _modname {
 
 #define DBGRET_SUCCESS(mod) dbgprint(mod,__func__,"Returning with success."); return WSTATUS_SUCCESS;
 #define DBGRET_FAILURE(mod) dbgprint(mod,__func__,"Returning with failure."); return WSTATUS_FAILURE;
+
+#define b2c(a) ( (isalnum(a) || (a == ' ')) ? a : '.')
 
 wstatus modt2name(debug_mod_t module,const char **name);
 void dbgprint(debug_mod_t module,const char *func,char *fmt,...);
