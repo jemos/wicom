@@ -301,12 +301,7 @@ wstatus
 _nvp_value_format(const char *value_ptr, const unsigned int value_size,nvpair_fflag_list *fflags)
 {
 	unsigned int i;
-	nvpair_fflag_list l_value_format = NVPAIR_FFLAG_UNQUOTED;
-	nvpair_fflag_list format_transform[][3] = {
-		{ NVPAIR_FFLAG_UNQUOTED , NVPAIR_FFLAG_QUOTED , NVPAIR_FFLAG_ENCODED },
-		{ NVPAIR_FFLAG_QUOTED , NVPAIR_FFLAG_QUOTED , NVPAIR_FFLAG_ENCODED },
-		{ NVPAIR_FFLAG_ENCODED , NVPAIR_FFLAG_ENCODED , NVPAIR_FFLAG_ENCODED }
-	}; /* format_transform[FORM][TO] */
+	nvpair_fflag_list l_fflags = NVPAIR_FFLAG_UNQUOTED;
 
 	dbgprint(MOD_NVPAIR,__func__,"called with value_ptr=%p, value_size=%u",value_ptr,value_size);
 
@@ -327,24 +322,40 @@ _nvp_value_format(const char *value_ptr, const unsigned int value_size,nvpair_ff
 
 	for( i = 0 ; i < value_size ; i++ )
 	{
-		if( V_VALUECHAR(value_ptr[i]) ) {
-			l_value_format = format_transform[l_value_format][NVPAIR_FFLAG_UNQUOTED];
+		if( nvp_flag_test(l_fflags,NVPAIR_FFLAG_ENCODED) )
+		   continue;
+
+		if( nvp_flag_test(l_fflags,NVPAIR_FFLAG_QUOTED) )
+		{
+			if( !V_QVALUECHAR(value_ptr[i]) ) {
+				l_fflags = NVPAIR_FFLAG_ENCODED;
+				break;
+			}
+
 			continue;
 		}
 
-		if( V_QVALUECHAR(value_ptr[i]) ) {
-			l_value_format = format_transform[l_value_format][NVPAIR_FFLAG_QUOTED];
+		if( nvp_flag_test(l_fflags,NVPAIR_FFLAG_UNQUOTED) )
+		{
+			if( !V_VALUECHAR(value_ptr[i]) )
+			{
+				if( V_QVALUECHAR(value_ptr[i]) ) {
+					l_fflags = NVPAIR_FFLAG_QUOTED;
+				} else {
+					l_fflags = NVPAIR_FFLAG_ENCODED;
+					break;
+				}
+			}
+
 			continue;
 		}
 
-		l_value_format = NVPAIR_FFLAG_ENCODED;
-		break;
 	}
 
-	dbgprint(MOD_NVPAIR,__func__,"finished processing value bytes, result is format %d",l_value_format);
+	dbgprint(MOD_NVPAIR,__func__,"finished processing value bytes, result is format %s",nvp_fflags_str(l_fflags));
 
-	*fflags = l_value_format;
-	dbgprint(MOD_NVPAIR,__func__,"updated fflags value to %d",*fflags);
+	*fflags = l_fflags;
+	dbgprint(MOD_NVPAIR,__func__,"updated fflags value to %d (%s)",*fflags,nvp_fflags_str(*fflags));
 
 	DBGRET_SUCCESS(MOD_NVPAIR);
 
