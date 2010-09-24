@@ -216,42 +216,42 @@ void request_test(void)
 
 	jmlist_initialize(&init);
 
-	_req_from_string(req_raw1,&req_text1);
-	_req_from_string(req_raw2,&req_text2);
-	_req_from_string(req_raw3,&req_text3);
-	_req_from_string(req_raw4,&req_text4);
+	req_from_string(req_raw1,&req_text1);
+	req_from_string(req_raw2,&req_text2);
+	req_from_string(req_raw3,&req_text3);
+	req_from_string(req_raw4,&req_text4);
 
-	_req_to_bin(req_text1,&req_bin1);
-	_req_to_text(req_bin1,&req_text1B);
-	_req_to_bin(req_text1B,&req_bin1T);
-	_req_diff(req_bin1,"req_bin1",req_bin1T,"req_bin1T");
+	req_to_bin(req_text1,&req_bin1);
+	req_to_text(req_bin1,&req_text1B);
+	req_to_bin(req_text1B,&req_bin1T);
+	req_diff(req_bin1,"req_bin1",req_bin1T,"req_bin1T");
 
-	_req_to_bin(req_text2,&req_bin2);
-	_req_to_text(req_bin2,&req_text2B);
-	_req_to_bin(req_text2B,&req_bin2T);
-	_req_diff(req_bin2,"req_bin2",req_bin2T,"req_bin2T");
+	req_to_bin(req_text2,&req_bin2);
+	req_to_text(req_bin2,&req_text2B);
+	req_to_bin(req_text2B,&req_bin2T);
+	req_diff(req_bin2,"req_bin2",req_bin2T,"req_bin2T");
 
-	_req_to_bin(req_text3,&req_bin3);
-	_req_dump(req_bin3);
-	_req_to_text(req_bin3,&req_text3B);
-	_req_dump(req_text3B);
-	_req_to_bin(req_text3B,&req_bin3T);
-	_req_diff(req_bin3,"req_bin3",req_bin3T,"req_bin3T");
+	req_to_bin(req_text3,&req_bin3);
+	req_dump(req_bin3);
+	req_to_text(req_bin3,&req_text3B);
+	req_dump(req_text3B);
+	req_to_bin(req_text3B,&req_bin3T);
+	req_diff(req_bin3,"req_bin3",req_bin3T,"req_bin3T");
 
-	_req_get_nv(req_bin3,"name2",5,&nvp);
+	req_get_nv(req_bin3,"name2",5,&nvp);
 	printf("GOT NVPAIR name2 = \"%s\"\n",array2z(nvp->value_ptr,nvp->value_size));
 
-	_req_get_nv(req_bin3T,"name1",5,&nvp);
+	req_get_nv(req_bin3T,"name1",5,&nvp);
 	printf("GOT NVPAIR name1 = \"%s\"\n",array2z(nvp->value_ptr,nvp->value_size));
 
-	_req_get_nv(req_bin3T,"nameX",5,&nvp);
+	req_get_nv(req_bin3T,"nameX",5,&nvp);
 
-	_req_to_bin(req_text4,&req_bin4);
-	_req_dump(req_bin4);
-	_req_to_text(req_bin4,&req_text4B);
-	_req_dump(req_text4B);
-	_req_to_bin(req_text4B,&req_bin4T);
-	_req_diff(req_bin4,"req_bin4",req_bin4T,"req_bin4T");
+	req_to_bin(req_text4,&req_bin4);
+	req_dump(req_bin4);
+	req_to_text(req_bin4,&req_text4B);
+	req_dump(req_text4B);
+	req_to_bin(req_text4B,&req_bin4T);
+	req_diff(req_bin4,"req_bin4",req_bin4T,"req_bin4T");
 
 	jmlist_uninitialize();
 	return;
@@ -331,19 +331,19 @@ void reqbuf_test(void)
 
 	ws = reqbuf_create(reqbuf_read1,0,REQBUF_TYPE_TEXT,&rb);
 	ws = reqbuf_read(rb,&req);
-	_req_dump(req);
+	req_dump(req);
 	ws = reqbuf_read(rb,&req);
-	_req_dump(req);
+	req_dump(req);
 	ws = reqbuf_destroy(rb);
 
 	/* create list of requests in binary stype */
 
-	_req_from_string(req_raw1,&req1T);
-	_req_to_bin(req1T,&req1B);
-	_req_from_string(req_raw2,&req2T);
-	_req_to_bin(req2T,&req2B);
-	_req_from_string(req_raw3,&req3T);
-	_req_to_bin(req3T,&req3B);
+	req_from_string(req_raw1,&req1T);
+	req_to_bin(req1T,&req1B);
+	req_from_string(req_raw2,&req2T);
+	req_to_bin(req2T,&req2B);
+	req_from_string(req_raw3,&req3T);
+	req_to_bin(req3T,&req3B);
 
 	req_list = (request_t)malloc(sizeof(struct _request_t)*3);
 	memcpy(req_list,req1B,sizeof(struct _request_t));
@@ -356,9 +356,9 @@ void reqbuf_test(void)
 	ws = reqbuf_read(rb,&req2R);
 	ws = reqbuf_read(rb,&req3R);
 
-	_req_diff(req1B,"req1B",req1R,"req1R");
-	_req_diff(req2B,"req2B",req2R,"req2R");
-	_req_diff(req3B,"req3B",req3R,"req3R");
+	req_diff(req1B,"req1B",req1R,"req1R");
+	req_diff(req2B,"req2B",req2R,"req2R");
+	req_diff(req3B,"req3B",req3R,"req3R");
 
 	/* TODO: TEST REQ LIST WITH TEXT STYPE'd REQUESTS */
 

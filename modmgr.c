@@ -113,7 +113,7 @@ _request_build_error_reply(const char *error_code,const char *error_description,
 
 	if( error_description && strlen(error_description) )
 	{
-		ws = _req_add_nvp_z(REQERROR_DESCNAME,error_description,aux_req);
+		ws = req_add_nvp_z(REQERROR_DESCNAME,error_description,aux_req);
 		if( ws != WSTATUS_SUCCESS ) {
 			dbgprint(MOD_MODMGR,__func__,"failed to add nvpair to request (req=%p)",aux_req);
 			goto return_fail;
@@ -130,7 +130,7 @@ _request_build_error_reply(const char *error_code,const char *error_description,
 	DBGRET_SUCCESS(MOD_MODMGR);
 return_fail:
 	if( aux_req )
-		_req_free(aux_req);
+		req_free(aux_req);
 
 	DBGRET_FAILURE(MOD_MODMGR);
 }
@@ -188,7 +188,7 @@ dest_not_found:
 	dbgprint(MOD_MODMGR,__func__,"sent error reply successfully");
 
 	/* free reply */
-	_req_free(reply);
+	req_free(reply);
 
 	if( mod_src )
 		_modreg_free(mod_src);
@@ -200,7 +200,7 @@ dest_not_found:
 
 return_fail:
 	if( reply )
-		_req_free(reply);
+		req_free(reply);
 
 	if( mod_src )
 		_modreg_free(mod_src);
@@ -597,7 +597,7 @@ wstatus _modreg_free(const struct _modreg_t *mod)
 void _modmgr_reqproc_cb(const request_t req)
 {
 	/* for now it will just dump the request.. */
-	_req_dump(req);
+	req_dump(req);
 }
 
 /*

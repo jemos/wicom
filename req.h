@@ -123,6 +123,7 @@ typedef enum _request_validate_result {
 	REQUEST_INVALID_VALUE
 } request_validate_result;
 
+/* internal functions */
 wstatus _req_from_text_to_bin(request_t req,request_t *req_bin);
 wstatus _req_from_pipe_to_bin(request_t req,request_t *req_bin);
 wstatus _req_nv_value_info(char *value_ptr,char **value_start,char **value_end,uint16_t *value_size);
@@ -136,27 +137,28 @@ wstatus _req_from_bin_to_text(request_t req,request_t *req_text);
 wstatus _req_from_pipe_to_text(request_t req,request_t *req_text);
 wstatus _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_name_size,nvpair_t *nvpp);
 wstatus _req_bin_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi);
-wstatus _req_add_nvp_z(const char *name_ptr,const char *value_ptr,request_t req);
 
-wstatus _req_to_pipe(request_t req,request_t *req_pipe);
-wstatus _req_to_text(request_t req,request_t *req_text);
-wstatus _req_to_bin(request_t req,request_t *req_bin);
-wstatus _req_build_bin(char *src,char *dst,request_type_list type,int id,jmlist nvl,request_t *req);
-wstatus _req_dump(request_t req);
-wstatus _req_lookup_src(request_t req,char *src);
-wstatus _req_lookup_dst(request_t req,char *dst);
-wstatus _req_lookup_id(request_t req,uint16_t *id);
-wstatus _req_lookup_type(request_t req,request_type_list *type);
-wstatus _req_get_nv(const request_t req,const char *name_ptr,unsigned int name_size,nvpair_t *nvpp);
-wstatus _req_get_nv_count(const struct _request_t *req,unsigned int *nv_count);
-wstatus _req_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi);
-wstatus _req_lookup_nv(const request_t req,const char *name_ptr,unsigned int name_size,nvpair_t *nvpp);
-wstatus _req_insert_nv(request_t req,char *name,char *value);
-wstatus _req_remove_nv(request_t req,char *name);
-wstatus _req_dump(request_t req);
-wstatus _req_diff(request_t req1_ptr,char *req1_label,request_t req2,char *req2_label);
-wstatus _req_from_string(const char *raw_text,request_t *req_text);
-wstatus _req_free(request_t req);
+/* functions that modify existing request */
+wstatus req_insert_nv(request_t req,char *name,char *value);
+wstatus req_add_nvp_z(const char *name_ptr,const char *value_ptr,request_t req);
+wstatus req_remove_nv(request_t req,char *name);
+
+/* functions to get informations/data from the request */
+wstatus req_get_nv(const request_t req,const char *name_ptr,unsigned int name_size,nvpair_t *nvpp);
+wstatus req_get_nv_count(const struct _request_t *req,unsigned int *nv_count);
+wstatus req_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi);
+
+/* functions that output new request data structure */
+wstatus req_from_string(const char *raw_text,request_t *req_text);
+wstatus req_to_text(request_t req,request_t *req_text);
+wstatus req_to_bin(request_t req,request_t *req_bin);
+
+/* clean up functions */
+wstatus req_free(request_t req);
+
+/* debugging functions */
+wstatus req_dump(request_t req);
+wstatus req_diff(request_t req1_ptr,char *req1_label,request_t req2,char *req2_label);
 
 #endif
 

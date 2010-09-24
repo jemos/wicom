@@ -360,7 +360,7 @@ reqbuf_read(reqbuf_t rb,request_t *req)
 			goto return_fail;
 
 req_type_text:
-			ws = _req_from_string(req_ptr,&new_req);
+			ws = req_from_string(req_ptr,&new_req);
 			if( ws != WSTATUS_SUCCESS ) {
 				dbgprint(MOD_REQBUF,__func__,"unable to create text request "
 						"(_req_from_string failed, ws=%s)",wstatus_str(ws));

@@ -1194,7 +1194,7 @@ return_fail:
 }
 
 wstatus
-_req_to_bin(request_t req,request_t *req_bin)
+req_to_bin(request_t req,request_t *req_bin)
 {
 	wstatus ws;
 	dbgprint(MOD_REQ,__func__,"called with req=%p, req_bin=%p",req,req_bin);
@@ -1233,7 +1233,7 @@ return_fail:
 	DBGRET_FAILURE(MOD_REQ);
 }
 
-void _req_dump_header(uint16_t id,request_type_list type,char *mod_src,char *mod_dst,char *req_code)
+void req_dump_header(uint16_t id,request_type_list type,char *mod_src,char *mod_dst,char *req_code)
 {
 	printf(	"    %s %u  %s -> %s (%s)\n",
 			(type == REQUEST_TYPE_REQUEST ? "REQ" : "RLY"),id,
@@ -1241,12 +1241,12 @@ void _req_dump_header(uint16_t id,request_type_list type,char *mod_src,char *mod
 }
 
 /*
-   _req_dump_nvp
+   req_dump_nvp
 
    Helper function to dump a single nvpair. Remember that name_ptr and value_ptr need not to be
    null terminated, thats why this functions prints char by char.
 */
-void _req_dump_nvp(char *name_ptr,uint16_t name_size,char *value_ptr,uint16_t value_size)
+void req_dump_nvp(char *name_ptr,uint16_t name_size,char *value_ptr,uint16_t value_size)
 {
 	unsigned int i;
 
@@ -1273,7 +1273,7 @@ _req_text_dump(request_t req)
 void _req_bin_jml_dump(void *ptr,void *param)
 {
 	nvpair_t nvp = (nvpair_t)ptr;
-	_req_dump_nvp(nvp->name_ptr,nvp->name_size,nvp->value_ptr,nvp->value_size);
+	req_dump_nvp(nvp->name_ptr,nvp->name_size,nvp->value_ptr,nvp->value_size);
 }
 
 wstatus
@@ -1281,7 +1281,7 @@ _req_bin_dump(request_t req)
 {
 	dbgprint(MOD_REQ,__func__,"called with req=%p",req);
 
-	_req_dump_header(req->data.bin.id,req->data.bin.type,req->data.bin.src,req->data.bin.dst,req->data.bin.code);
+	req_dump_header(req->data.bin.id,req->data.bin.type,req->data.bin.src,req->data.bin.dst,req->data.bin.code);
 	jmlist_parse(req->data.bin.nvl,_req_bin_jml_dump,0);
 
 	DBGRET_SUCCESS(MOD_REQ);
@@ -1294,7 +1294,7 @@ _req_pipe_dump(request_t req)
 }
 
 wstatus
-_req_dump(request_t req)
+req_dump(request_t req)
 {
 	wstatus ws;
 
@@ -1334,14 +1334,14 @@ return_fail:
 }
 
 /*
-   _req_to_text
+   req_to_text
 
    Helper function to convert a request to a new request with text form.
    Client code is responsible to free the new allocated request if the function
    succeds.
 */
 wstatus
-_req_to_text(request_t req,request_t *req_text)
+req_to_text(request_t req,request_t *req_text)
 {
 	wstatus ws;
 	dbgprint(MOD_REQ,__func__,"called with req=%p, req_text=%p",req,req_text);
@@ -1698,13 +1698,13 @@ _req_from_pipe_to_text(request_t req,request_t *req_text)
 }
 
 /*
-   _req_diff
+   req_diff
 
    Helper function to dump request differences, usefull for request conversion
    functions testing. Requests must be of the same type.
 */
 wstatus
-_req_diff(request_t req1_ptr,char *req1_label,request_t req2_ptr,char *req2_label)
+req_diff(request_t req1_ptr,char *req1_label,request_t req2_ptr,char *req2_label)
 {
 	char aux_buf1[20] = {'\0'};
 	char aux_buf2[20] = {'\0'};
@@ -1854,14 +1854,17 @@ _req_diff(request_t req1_ptr,char *req1_label,request_t req2_ptr,char *req2_labe
 }
 
 /*
-   _req_from_string
+   req_from_string
 
-   Helper function that builds a TEXT type request from a string.
+   Public function that builds a TEXT type request from a string.
    The string should contain all the request, this string pointer
    wont be referenced in the request so the client code might free it.
+
+   This function allocates a new request data structure which is
+   stored in req_text and the client code is responsible for freeing it.
 */
 wstatus
-_req_from_string(const char *raw_text,request_t *req_text)
+req_from_string(const char *raw_text,request_t *req_text)
 {
 	request_t req = 0;
 	size_t req_size;
@@ -1904,7 +1907,7 @@ return_fail:
 }
 
 /*
-   _req_add_nvp_z
+   req_add_nvp_z
 
    Helper function of the req family for adding a nv-pair to the request.
    The name isn't checked for existence in the nv-pair list. When there is
@@ -1913,7 +1916,7 @@ return_fail:
    in the request nvpair NAME and VALUE.
 */
 wstatus
-_req_add_nvp_z(const char *name_ptr,const char *value_ptr,request_t req)
+req_add_nvp_z(const char *name_ptr,const char *value_ptr,request_t req)
 {
 	unsigned int value_size;
 	nvpair_t nvp = 0;
@@ -1995,12 +1998,12 @@ return_fail:
 }
 
 /*
-   _req_free
+   req_free
 
    As the name says, this function frees any data structure associated to the request.
 */
 wstatus
-_req_free(request_t req)
+req_free(request_t req)
 {
 	jmlist_status jmls;
 
@@ -2048,7 +2051,7 @@ return_fail:
 }
 
 /*
-   _req_get_nv
+   req_get_nv
 
    Helper function that searches a name-value pair in a request, it uses the name as the needle.
    The name-value pair is returned in a nvpair_t structure, the client passes the address of
@@ -2056,7 +2059,7 @@ return_fail:
    data structure returned using _nvp_free.
 */
 wstatus
-_req_get_nv(const request_t req,const char *name_ptr,unsigned int name_size,nvpair_t *nvpp)
+req_get_nv(const request_t req,const char *name_ptr,unsigned int name_size,nvpair_t *nvpp)
 {
 	wstatus ws;
 
@@ -2295,14 +2298,14 @@ return_fail:
 }
 
 /*
-   _req_get_nv_count
+   req_get_nv_count
 
    Helper function to get number of name-value pairs that a request has. The
    number of name-value pairs returned is one-based. If the request doesn't
    have any name-value pair, nv_count is set to 0 (zero).
 */
 wstatus
-_req_get_nv_count(const struct _request_t *req,unsigned int *nv_count)
+req_get_nv_count(const struct _request_t *req,unsigned int *nv_count)
 {
 	wstatus ws;
 	jmlist_status jmls;
@@ -2377,7 +2380,7 @@ _req_get_nv_count(const struct _request_t *req,unsigned int *nv_count)
    Helper function that gets the name-value pair in a binary stype request.
    If the request doesn't have any name-value pair or if the name-value isn't found
    this function returns failure. If the client code wants to simply check for the
-   existence of the name-value pair, _req_get_nv_info function should be used instead.
+   existence of the name-value pair, req_get_nv_info function should be used instead.
 */
 wstatus
 _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_name_size,nvpair_t *nvpp)
@@ -2422,7 +2425,7 @@ _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_
 	}
 
 	dbgprint(MOD_REQ,__func__,"(req=%p) calling helper function to get name-value count",req);
-	ws = _req_get_nv_count(req,&nv_count);
+	ws = req_get_nv_count(req,&nv_count);
 	dbgprint(MOD_REQ,__func__,"(req=%p) helper function returned (ws=%s)",req,wstatus_str(ws));
 	if( ws != WSTATUS_SUCCESS ) {
 		dbgprint(MOD_REQ,__func__,"(req=%p) failed to get name-value count (helper function failed with ws=%s)",
@@ -2538,19 +2541,19 @@ return_fail:
 }
 
 /*
-   _req_get_nv_info
+   req_get_nv_info
 
    Helper function that obtains a specific nvpair informations. These informations are saved
    in a data structure that is passed by the caller, nvpair_info_t see the header file for
    more information about the information that is possible to obtain for each nvpair.
 
-   The implementation of this function is based on the code from _req_get_nv except that
+   The implementation of this function is based on the code from req_get_nv except that
    when it finds the wanted name-value pair, it obtains the characteristics of the name-value
    pair and saves that information into nvpi structure.
 
    How the information is gathered? _nvp_text_... _req_nv...?
 */
-wstatus _req_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi)
+wstatus req_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi)
 {
 	wstatus ws;
 
@@ -2670,7 +2673,7 @@ _req_bin_get_nv_info(const struct _request_t *req,const char *look_name_ptr,
 	nvpi->flags = NVPAIR_FLAG_UNINITIALIZED;
 
 	dbgprint(MOD_REQ,__func__,"(req=%p) calling helper function to get name-value count",req);
-	ws = _req_get_nv_count(req,&nv_count);
+	ws = req_get_nv_count(req,&nv_count);
 	dbgprint(MOD_REQ,__func__,"(req=%p) helper function returned (ws=%s)",req,wstatus_str(ws));
 	if( ws != WSTATUS_SUCCESS ) {
 		dbgprint(MOD_REQ,__func__,"(req=%p) failed to get name-value count (helper function failed with ws=%s)",
