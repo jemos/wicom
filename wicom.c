@@ -253,6 +253,10 @@ void request_test(void)
 	req_to_bin(req_text4B,&req_bin4T);
 	req_diff(req_bin4,"req_bin4",req_bin4T,"req_bin4T");
 
+
+	request_t aux_req;
+	req_from_string("456 fromXpto toXtpo reqCODE nvpname1=#6566672A686970 name2=\"lala lele\"",&aux_req);
+	req_validate();
 	jmlist_uninitialize();
 	return;
 }

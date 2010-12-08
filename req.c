@@ -810,7 +810,7 @@ _req_text_token_seek(const char *req_text,text_token_t token,char **token_ptr)
 {
 	text_token_t cur_token;
 	char *cur_token_str = 0;
-	uint16_t i;
+	unsigned int i;
 
 	dbgprint(MOD_REQ,__func__,"called with req_text=%p, token=%d, token_ptr=%p",req_text,token,token_ptr);
 
@@ -2921,7 +2921,7 @@ _req_text_get_nv_info(const struct _request_t *req,const char *look_name_ptr,
 	for( nv_idx = 1 ; ; nv_idx++ )
    	{
 		/* validate nvpair using helper function */
-		ws = _req_text_nv_validate(req,&nvp_flags);
+		ws = _req_text_nv_validate(aux,&nvp_flags);
 		if( ws != WSTATUS_SUCCESS ) {
 			dbgprint(MOD_REQ,__func__,"(req=%p) failed to validate text request nvpair (idx=%u)",req,nv_idx);
 			goto return_fail;
@@ -3028,21 +3028,19 @@ return_fail:
    and characters.
 */
 wstatus
-_req_text_nv_validate(const struct _request_t *req,nvpair_iflag_list *iflags)
+_req_text_nv_validate(const char *nv_ptr,nvpair_iflag_list *iflags)
 {
 	char *aux;
 	char *aux_ref;
-	wstatus ws;
 	nvpair_iflag_list l_iflags;
 	bool encoded = false;
 	bool quoted = false;
 
-	dbgprint(MOD_REQ,__func__,"called with req=%p, iflags=%p",req,iflags);
+	dbgprint(MOD_REQ,__func__,"called with nv_ptr=%p, iflags=%p",nv_ptr,iflags);
 
 	/* validate arguments */
-
-	if( !req ) {
-		dbgprint(MOD_REQ,__func__,"invalid req argument (req=0)");
+	if( !nv_ptr ) {
+		dbgprint(MOD_REQ,__func__,"invalid nv_ptr argument (nv_ptr=0)");
 		DBGRET_FAILURE(MOD_REQ);
 	}
 
@@ -3051,23 +3049,10 @@ _req_text_nv_validate(const struct _request_t *req,nvpair_iflag_list *iflags)
 		DBGRET_FAILURE(MOD_REQ);
 	}
 
-	if( req->stype != REQUEST_STYPE_TEXT ) {
-		dbgprint(MOD_REQ,__func__,"invalid request to be used with this function (expecting REQUEST_STYPE_TEXT)");
-		DBGRET_FAILURE(MOD_REQ);
-	}
-
-	dbgprint(MOD_REQ,__func__,"(req=%p) clearing iflags",req);
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) clearing iflags",nv_ptr);
 	l_iflags = NVPAIR_FLAG_UNINITIALIZED;
 
-	dbgprint(MOD_REQ,__func__,"(req=%p) seeking to the name-value list",req);
-	ws = _req_text_token_seek(req->data.text.raw,TEXT_TOKEN_NVL,&aux);
-	if( ws != WSTATUS_SUCCESS ) {
-		DBGRET_FAILURE(MOD_REQ);
-	}
-	dbgprint(MOD_REQ,__func__,"(req=%p) seeked to the name-value list successfully (ptr=%p)",req,aux);
-
-	aux_ref = aux;
-
+	aux = aux_ref = (char*)nv_ptr;
 	while(1)
 	{
 		if( V_REQENDCHAR(*aux) )
@@ -3086,14 +3071,13 @@ _req_text_nv_validate(const struct _request_t *req,nvpair_iflag_list *iflags)
 	}
 
 	/* didn't reach to the end char.. this shouldn't happen! */
-
-	dbgprint(MOD_REQ,__func__,"(req=%p) couldn't reach to the end of the name in this nvpair",req);
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) couldn't reach to the end of the name in this nvpair",nv_ptr);
 	DBGRET_FAILURE(MOD_REQ);
 
 name_end_of_req:
 	if( aux == aux_ref ) {
 		/* no name was processed */
-		dbgprint(MOD_REQ,__func__,"(req=%p) name is empty",req);
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) name is empty",nv_ptr);
 		DBGRET_FAILURE(MOD_REQ);
 	}
 
@@ -3103,15 +3087,15 @@ name_end_of_req:
 
 invalid_name:
 	/* found invalid character in NAME field */
-	dbgprint(MOD_REQ,__func__,"(req=%p) found invalid/unexpected character (0x%02X '%c') "
-			"in name parsing at index %u",req,*aux,b2c(*aux),aux - aux_ref);
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) found invalid/unexpected character (0x%02X '%c') "
+			"in name parsing at index %u",nv_ptr,*aux,b2c(*aux),aux - aux_ref);
 	goto return_success;
 
 end_of_name:
 	if( aux == aux_ref ) {
 		/* this happens when the user passes name_ptr="=value" so it doesn't have
 		   any name character and the value prefix starts right next. */
-		dbgprint(MOD_REQ,__func__,"(req=%p) name is empty (no name character found)",req);
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) name is empty (no name character found)",nv_ptr);
 		l_iflags = NVPAIR_NFLAG_NOT_SET;
 		goto return_success;
 	}
@@ -3120,7 +3104,7 @@ end_of_name:
 	/* start processing value */
 	aux_ref = aux;
 
-	dbgprint(MOD_REQ,__func__,"(req=%p) parsed name successfully, starting value parsing",req);
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) parsed name successfully, starting value parsing",nv_ptr);
 
 	if( V_TOKSEPCHAR(*aux) ) {
 		l_iflags |= NVPAIR_VFLAG_VALID | NVPAIR_VFLAG_NOT_SET;
@@ -3128,8 +3112,8 @@ end_of_name:
 	}
 
 	if( !V_NVSEPCHAR(*aux) ) {
-		dbgprint(MOD_REQ,__func__,"(req=%p) unexpected character found in value prefix (0x%02X '%c') at index %u",
-				req,*aux,b2c(*aux),aux - aux_ref);
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) unexpected character found in value prefix (0x%02X '%c') at index %u",
+				nv_ptr,*aux,b2c(*aux),aux - aux_ref);
 	}
 	aux++;
 
@@ -3151,27 +3135,27 @@ end_of_name:
 			goto value_end;
 
 		if( quoted && V_QUOTECHAR(*aux) ) {
-			dbgprint(MOD_REQ,__func__,"(req=%p) reached quote character (this value has finished)",req);
+			dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) reached quote character (this value has finished)",nv_ptr);
 			aux++;
 			goto value_end;
 		}
 
 		if( encoded && !V_EVALUECHAR(*aux) ) {
-			dbgprint(MOD_REQ,__func__,"(req=%p) invalid character found in encoded value (0x%02X '%c' at index %u)",
-					req,*aux,b2c(*aux),aux - aux_ref);
+			dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) invalid character found in encoded value (0x%02X '%c' at index %u)",
+					nv_ptr,*aux,b2c(*aux),aux - aux_ref);
 			goto return_success;
 		}
 
 		if( quoted && !V_QVALUECHAR(*aux) ) {
-			dbgprint(MOD_REQ,__func__,"(req=%p) invalid character found in quoted value (0x%02X '%c' at index %u)",
-					req,*aux,b2c(*aux),aux - aux_ref);
+			dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) invalid character found in quoted value (0x%02X '%c' at index %u)",
+					nv_ptr,*aux,b2c(*aux),aux - aux_ref);
 			goto return_success;
 		}
 
 		if( !quoted && !encoded && !V_VALUECHAR(*aux) )
 		{
-			dbgprint(MOD_REQ,__func__,"(req=%p) invalid character found in value (0x%02X '%c' at index %u)",
-					req,*aux,b2c(*aux),aux - aux_ref);
+			dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) invalid character found in value (0x%02X '%c' at index %u)",
+					nv_ptr,*aux,b2c(*aux),aux - aux_ref);
 			goto return_success;
 		}
 	}
@@ -3184,6 +3168,297 @@ return_success:
 
 	*iflags = l_iflags;
 	dbgprint(MOD_REQ,__func__,"updated iflags value to %d (%s)",*iflags,nvp_iflags_str(*iflags));
+
+	DBGRET_SUCCESS(MOD_REQ);
+}
+
+/*
+   req_validate
+
+   Public function to validate the TEXT formated request, this is useful
+   when the client code didn't generate the request in binary format and
+   needs to validate the request before converting it. The request in
+   text form can come for example from remote modules.
+
+   This function returns a status value and the result of the validation
+   goes to the validation_result variable.
+*/
+wstatus
+req_validate(const char *req_text,const unsigned int req_size,req_validation_t *req_validation)
+{
+
+	dbgprint(MOD_REQ,__func__,"called with req_text=%p, req_size=%u, req_validation=%p",
+			req_text,req_size,req_validation);
+
+	/* validate arguments */
+	if( !req_text ) {
+		dbgprint(MOD_REQ,__func__,"invalid req_text argument (req_text=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !req_size ) {
+		dbgprint(MOD_REQ,__func__,"request size should be bigger than 0 (req_size=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !req_validation ) {
+		dbgprint(MOD_REQ,__func__,"invalid validation_result argument (validation_result=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	DBGRET_SUCCESS(MOD_REQ);
+}
+
+/*
+   _req_validate_id
+
+   Helper function to validate the ID token from the TEXT request. It receives a pointer
+   to a char pointer that should contain the address of the ID string to be evaluated.
+   Before returning, the function updates the token_ptr value to one byte after the last
+   beloging to the token.
+*/
+wstatus
+_req_validate_id(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status)
+{
+	unsigned int aux_ui;
+
+	dbgprint(MOD_REQ,__func__,"called with token_ptr=%p, token_max_size=%u, token_status=%p");
+
+	if( !token_ptr || !(*token_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_ptr argument specified (token_ptr=0 or *token_ptr=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !token_max_size ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_max_size argument specified (expecting >0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !token_status ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_status argument (token_status=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	for( aux_ui = 0 ; aux_ui < token_max_size ; aux_ui++ )
+	{
+		if( V_RIDCHAR((*token_ptr)[aux_ui]) )
+			continue;
+
+		/* not an ID character, validate */
+		if( V_TOKSEPCHAR((*token_ptr)[aux_ui]) || V_REPLYCHAR((*token_ptr)[aux_ui]) )
+			goto return_ok;
+
+		dbgprint(MOD_REQ,__func__,"found invalid character in ID token ('%c')",token_ptr[aux_ui]);
+
+		goto return_invalid;
+	}
+
+	/* means it reached the end of the buffer without processing an end character for
+	   the ID token. */
+	dbgprint(MOD_REQ,__func__,"unable to find ID token end");
+
+return_invalid:
+	*token_status = TOKEN_IS_INVALID;
+	dbgprint(MOD_REQ,__func__,"updated token_status value to %d",*token_status);
+	DBGRET_SUCCESS(MOD_REQ);
+
+return_ok:
+	*token_status = TOKEN_IS_VALID;
+	dbgprint(MOD_REQ,__func__,"updated token_status value to %d",*token_status);
+	*token_ptr = *token_ptr + aux_ui;
+	dbgprint(MOD_REQ,__func__,"updated *token_ptr value to %p",*token_ptr);
+
+	DBGRET_SUCCESS(MOD_REQ);
+}
+
+/*
+   _req_validate_type
+
+   Helper function to validate the TYPE token from the TEXT request. It receives a pointer
+   to a char pointer that should contain the address of the ID string to be evaluated.
+   Before returning, the function updates the token_ptr value to one byte after the last
+   beloging to the token.
+*/
+wstatus
+_req_validate_type(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status)
+{
+	unsigned int aux_ui;
+
+	dbgprint(MOD_REQ,__func__,"called with token_ptr=%p, token_max_size=%u, token_status=%p");
+
+	if( !token_ptr || !(*token_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_ptr argument specified (token_ptr=0 or *token_ptr=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !token_max_size ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_max_size argument specified (expecting >0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !token_status ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_status argument (token_status=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	aux_ui = 0;
+
+	/* not an ID character, validate */
+	if( V_TOKSEPCHAR((*token_ptr)[aux_ui]) )
+		goto return_ok;
+
+	if( V_REPLYCHAR((*token_ptr)[aux_ui]) )
+	{
+		if( token_max_size < 2 ) {
+			/* means it reached the end of the buffer without processing an end character for
+			   the ID token. */
+			dbgprint(MOD_REQ,__func__,"unable to find TYPE token end");
+			goto return_invalid;
+		}
+
+		aux_ui++;
+		if( V_TOKSEPCHAR((*token_ptr)[aux_ui]) )
+			goto return_ok;
+	}
+
+	/* invalid char found */
+	dbgprint(MOD_REQ,__func__,"found invalid character in ID token ('%c')",(*token_ptr)[aux_ui]);
+return_invalid:
+	*token_status = TOKEN_IS_INVALID;
+	dbgprint(MOD_REQ,__func__,"updated token_status value to %d",*token_status);
+	DBGRET_SUCCESS(MOD_REQ);
+
+
+return_ok:
+	*token_status = TOKEN_IS_VALID;
+	dbgprint(MOD_REQ,__func__,"updated token_status value to %d",*token_status);
+	*token_ptr = *token_ptr + aux_ui;
+	dbgprint(MOD_REQ,__func__,"updated *token_ptr value to %p",*token_ptr);
+
+	DBGRET_SUCCESS(MOD_REQ);
+}
+
+/*
+   _req_validate_mod
+
+   Helper function to validate the MODSRC/MODDST token from the TEXT request. It receives a pointer
+   to a char pointer that should contain the address of the ID string to be evaluated.
+   Before returning, the function updates the token_ptr value to one byte after the last
+   beloging to the token.
+*/
+wstatus
+_req_validate_mod(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status)
+{
+	unsigned int aux_ui;
+
+	dbgprint(MOD_REQ,__func__,"called with token_ptr=%p, token_max_size=%u, token_status=%p");
+
+	if( !token_ptr || !(*token_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_ptr argument specified (token_ptr=0 or *token_ptr=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !token_max_size ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_max_size argument specified (expecting >0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !token_status ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_status argument (token_status=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	for( aux_ui = 0 ; aux_ui < token_max_size ; aux_ui++ )
+	{
+		if( V_MODCHAR((*token_ptr)[aux_ui]) )
+			continue;
+
+		/* not an ID character, validate */
+		if( V_TOKSEPCHAR((*token_ptr)[aux_ui]) )
+			goto return_ok;
+
+		dbgprint(MOD_REQ,__func__,"found invalid character in MOD token ('%c')",(*token_ptr)[aux_ui]);
+
+		goto return_invalid;
+	}
+
+	/* means it reached the end of the buffer without processing an end character for
+	   the ID token. */
+	dbgprint(MOD_REQ,__func__,"unable to find MOD token end");
+
+return_invalid:
+	*token_status = TOKEN_IS_INVALID;
+	dbgprint(MOD_REQ,__func__,"updated token_status value to %d",*token_status);
+	DBGRET_SUCCESS(MOD_REQ);
+
+return_ok:
+	*token_status = TOKEN_IS_VALID;
+	dbgprint(MOD_REQ,__func__,"updated token_status value to %d",*token_status);
+	*token_ptr = *token_ptr + aux_ui;
+	dbgprint(MOD_REQ,__func__,"updated *token_ptr value to %p",*token_ptr);
+
+	DBGRET_SUCCESS(MOD_REQ);
+}
+
+/*
+   _req_validate_code
+
+   Helper function to validate the CODE token from the TEXT request. It receives a pointer
+   to a char pointer that should contain the address of the ID string to be evaluated.
+   Before returning, the function updates the token_ptr value to one byte after the last
+   beloging to the token.
+*/
+
+wstatus
+_req_validate_code(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status)
+{
+	unsigned int aux_ui;
+
+	dbgprint(MOD_REQ,__func__,"called with token_ptr=%p, token_max_size=%u, token_status=%p");
+
+	if( !token_ptr || !(*token_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_ptr argument specified (token_ptr=0 or *token_ptr=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !token_max_size ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_max_size argument specified (expecting >0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !token_status ) {
+		dbgprint(MOD_REQ,__func__,"invalid token_status argument (token_status=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	for( aux_ui = 0 ; aux_ui < token_max_size ; aux_ui++ )
+	{
+		if( V_CODECHAR((*token_ptr)[aux_ui]) )
+			continue;
+
+		/* not an ID character, validate */
+		if( V_TOKSEPCHAR((*token_ptr)[aux_ui]) || V_REQENDCHAR((*token_ptr)[aux_ui]) )
+			goto return_ok;
+
+		dbgprint(MOD_REQ,__func__,"found invalid character in CODE token ('%c')",(*token_ptr)[aux_ui]);
+
+		goto return_invalid;
+	}
+
+	/* means it reached the end of the buffer without processing an end character for
+	   the ID token. */
+	dbgprint(MOD_REQ,__func__,"unable to find CODE token end");
+
+return_invalid:
+	*token_status = TOKEN_IS_INVALID;
+	dbgprint(MOD_REQ,__func__,"updated token_status value to %d",*token_status);
+	DBGRET_SUCCESS(MOD_REQ);
+
+return_ok:
+	*token_status = TOKEN_IS_VALID;
+	dbgprint(MOD_REQ,__func__,"updated token_status value to %d",*token_status);
+	*token_ptr = *token_ptr + aux_ui;
+	dbgprint(MOD_REQ,__func__,"updated *token_ptr value to %p",*token_ptr);
 
 	DBGRET_SUCCESS(MOD_REQ);
 }

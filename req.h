@@ -117,11 +117,16 @@ typedef enum _request_lookup_result {
 	REQUEST_NV_NOT_FOUND
 } request_lookup_result;
 
-typedef enum _request_validate_result {
-	REQUEST_VALID,
+typedef enum _req_validation_t {
+	REQUEST_IS_VALID,
 	REQUEST_INVALID_NAME,
 	REQUEST_INVALID_VALUE
-} request_validate_result;
+} req_validation_t;
+
+typedef enum _token_status_t {
+	TOKEN_IS_VALID,
+	TOKEN_IS_INVALID
+} token_status_t;
 
 /* internal functions */
 wstatus _req_from_text_to_bin(request_t req,request_t *req_bin);
@@ -130,13 +135,18 @@ wstatus _req_nv_value_info(char *value_ptr,char **value_start,char **value_end,u
 wstatus _req_nv_name_info(char *name_ptr,char **name_end,uint16_t *name_size);
 wstatus _req_text_token_seek(const char *req_text,text_token_t token,char **token_ptr);
 wstatus _req_text_nv_parse(char *nv_ptr,char **name_start,unsigned int *name_size,char **value_start,unsigned int *value_size,nvpair_fflag_list *fflags);
-wstatus _req_text_nv_validate(const struct _request_t *req,nvpair_iflag_list *iflags);
+wstatus _req_text_nv_validate(const char *nv_ptr,nvpair_iflag_list *iflags);
 wstatus _req_text_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_name_size,nvpair_t *nvpp);
 wstatus _req_text_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi);
 wstatus _req_from_bin_to_text(request_t req,request_t *req_text);
 wstatus _req_from_pipe_to_text(request_t req,request_t *req_text);
 wstatus _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned int look_name_size,nvpair_t *nvpp);
 wstatus _req_bin_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi);
+wstatus _req_validate_id(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
+wstatus _req_validate_type(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
+wstatus _req_validate_modsrc(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
+wstatus _req_validate_moddst(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
+wstatus _req_validate_code(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
 
 /* functions that modify existing request */
 wstatus req_insert_nv(request_t req,char *name,char *value);
@@ -147,6 +157,7 @@ wstatus req_remove_nv(request_t req,char *name);
 wstatus req_get_nv(const request_t req,const char *name_ptr,unsigned int name_size,nvpair_t *nvpp);
 wstatus req_get_nv_count(const struct _request_t *req,unsigned int *nv_count);
 wstatus req_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi);
+wstatus req_validate(const char *req_text,const unsigned int req_size,req_validation_t *req_validation);
 
 /* functions that output new request data structure */
 wstatus req_from_string(const char *raw_text,request_t *req_text);
