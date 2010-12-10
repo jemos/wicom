@@ -3026,6 +3026,8 @@ return_fail:
    in text form. First we validate the data only then we use it, if something messes
    up when we're using the data, we'll be sure its not due to the message formating
    and characters.
+
+ATTN: THIS FUNCTION IS DEPRECATED. USE _REQ_VALIDATE_NV INSTEAD.
 */
 wstatus
 _req_text_nv_validate(const char *nv_ptr,nvpair_iflag_list *iflags)
@@ -3186,6 +3188,12 @@ return_success:
 wstatus
 req_validate(const char *req_text,const unsigned int req_size,req_validation_t *req_validation)
 {
+	char *aux_ptr;
+	char *max_addr;
+	int nv_idx;
+	nv_status_t nv_status;
+	token_status_t tok_status;
+	wstatus ws;
 
 	dbgprint(MOD_REQ,__func__,"called with req_text=%p, req_size=%u, req_validation=%p",
 			req_text,req_size,req_validation);
@@ -3206,6 +3214,396 @@ req_validate(const char *req_text,const unsigned int req_size,req_validation_t *
 		DBGRET_FAILURE(MOD_REQ);
 	}
 
+	aux_ptr = (char*)req_text;
+	max_addr = (char*)req_text + req_size - 1;
+
+	/* validation of ID token */
+
+	dbgprint(MOD_REQ,__func__,"validating ID token, calling helper function _req_validate_id");
+	ws = _req_validate_id(&aux_ptr,max_addr - aux_ptr,&tok_status);
+	dbgprint(MOD_REQ,__func__,"helper function returned %s",wstatus_str(ws));
+	if( ws != WSTATUS_SUCCESS ) {
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( tok_status == TOKEN_IS_INVALID ) {
+		dbgprint(MOD_REQ,__func__,"detected invalid ID token in this request");
+		*req_validation = REQUEST_INVALID_ID;
+		goto return_success;
+	}
+
+	/* validation of TYPE token */
+
+	dbgprint(MOD_REQ,__func__,"validating TYPE token, calling helper function _req_validate_type");
+	ws = _req_validate_type(&aux_ptr,max_addr - aux_ptr,&tok_status);
+	dbgprint(MOD_REQ,__func__,"helper function returned %s",wstatus_str(ws));
+	if( ws != WSTATUS_SUCCESS ) {
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( tok_status == TOKEN_IS_INVALID ) {
+		dbgprint(MOD_REQ,__func__,"detected invalid TYPE token in this request");
+		*req_validation = REQUEST_INVALID_TYPE;
+		goto return_success;
+	}
+
+	if( (max_addr - aux_ptr) < 1 ) {
+		dbgprint(MOD_REQ,__func__,"missing MODSRC token in request");
+		*req_validation = REQUEST_INVALID_CODE;
+		goto return_success;
+	}
+
+	if( !V_TOKSEPCHAR(*aux_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"detected invalid char between TYPE and MODSRC tokens (%c)",*aux_ptr);
+		*req_validation = REQUEST_INVALID_SEP;
+		goto return_success;
+	}
+	aux_ptr++;
+
+	/* validation of MOD SOURCE token */
+
+	dbgprint(MOD_REQ,__func__,"validating MODSRC token, calling helper function _req_validate_mod");
+	ws = _req_validate_mod(&aux_ptr,max_addr - aux_ptr,&tok_status);
+	dbgprint(MOD_REQ,__func__,"helper function returned %s",wstatus_str(ws));
+	if( ws != WSTATUS_SUCCESS ) {
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( tok_status == TOKEN_IS_INVALID ) {
+		dbgprint(MOD_REQ,__func__,"detected invalid MODSRC token in this request");
+		*req_validation = REQUEST_INVALID_MODSRC;
+		goto return_success;
+	}
+
+	if( (max_addr - aux_ptr) < 1 ) {
+		dbgprint(MOD_REQ,__func__,"missing MODDST token in request");
+		*req_validation = REQUEST_INVALID_CODE;
+		goto return_success;
+	}
+
+	if( !V_TOKSEPCHAR(*aux_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"detected invalid char between MODSRC and MODDST tokens (%c)",*aux_ptr);
+		*req_validation = REQUEST_INVALID_SEP;
+		goto return_success;
+	}
+	aux_ptr++;
+	
+	/* validation of MOD DEST token */
+
+	dbgprint(MOD_REQ,__func__,"validating MODDST token, calling helper function _req_validate_mod");
+	ws = _req_validate_mod(&aux_ptr,max_addr - aux_ptr,&tok_status);
+	dbgprint(MOD_REQ,__func__,"helper function returned %s",wstatus_str(ws));
+	if( ws != WSTATUS_SUCCESS ) {
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( tok_status == TOKEN_IS_INVALID ) {
+		dbgprint(MOD_REQ,__func__,"detected invalid MODDST token in this request");
+		*req_validation = REQUEST_INVALID_MODDST;
+		goto return_success;
+	}
+
+	if( (max_addr - aux_ptr) < 1 ) {
+		dbgprint(MOD_REQ,__func__,"missing CODE token in request");
+		*req_validation = REQUEST_INVALID_CODE;
+		goto return_success;
+	}
+
+	if( !V_TOKSEPCHAR(*aux_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"detected invalid char between MODDST and CODE tokens (%c)",*aux_ptr);
+		*req_validation = REQUEST_INVALID_SEP;
+		goto return_success;
+	}
+	aux_ptr++;
+
+	/* validation of CODE token */
+
+	dbgprint(MOD_REQ,__func__,"validating CODE token, calling helper function _req_validate_code");
+	ws = _req_validate_code(&aux_ptr,max_addr - aux_ptr + 1,&tok_status);
+	dbgprint(MOD_REQ,__func__,"helper function returned %s",wstatus_str(ws));
+	if( ws != WSTATUS_SUCCESS ) {
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( tok_status == TOKEN_IS_INVALID ) {
+		dbgprint(MOD_REQ,__func__,"detected invalid CODE token in this request");
+		*req_validation = REQUEST_INVALID_CODE;
+		dbgprint(MOD_REQ,__func__,"updated req_validation value to %d",*req_validation);
+		goto return_success;
+	}
+
+	if( aux_ptr > max_addr ) {
+		dbgprint(MOD_REQ,__func__,"missing separator or request end character after CODE token");
+		*req_validation = REQUEST_INVALID_SEP;
+		dbgprint(MOD_REQ,__func__,"updated req_validation value to %d",*req_validation);
+		goto return_success;
+	}
+
+	if( V_REQENDCHAR(*aux_ptr) )
+	{
+		dbgprint(MOD_REQ,__func__,"request end character reached");
+		if( (max_addr - aux_ptr) > 1 ) {
+			dbgprint(MOD_REQ,__func__,"warning! dummy data found after the request end char");
+			*req_validation = REQUEST_INVALID_END;
+			dbgprint(MOD_REQ,__func__,"updated req_validation value to %d",*req_validation);
+			goto return_success;
+		}
+		*req_validation = REQUEST_IS_VALID;
+		goto return_success;
+	}
+
+	if( !V_TOKSEPCHAR(*aux_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"detected invalid char between MODDST and NVP tokens (%c)",*aux_ptr);
+		*req_validation = REQUEST_INVALID_SEP;
+		goto return_success;
+	}
+	aux_ptr++;
+
+	/* check nvp in loop */
+
+	nv_idx = 0;
+
+next_nvp:
+
+	dbgprint(MOD_REQ,__func__,"calling helper function to validate nvpair %i at offset %d",
+			nv_idx++, aux_ptr - req_text);
+	
+	ws = _req_validate_nv(&aux_ptr,max_addr - aux_ptr,&nv_status);
+	dbgprint(MOD_REQ,__func__,"helper function returned %s",wstatus_str(ws));
+
+	if( ws != WSTATUS_SUCCESS ) {
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( nv_status != NV_IS_VALID ) {
+		dbgprint(MOD_REQ,__func__,"helper function said nvpair %i is invalid",nv_idx);
+		*req_validation = REQUEST_INVALID_NV;
+		dbgprint(MOD_REQ,__func__,"updated req_validation value to %d",*req_validation);
+		DBGRET_SUCCESS(MOD_REQ);
+	}
+	dbgprint(MOD_REQ,__func__,"helper function said nvpair %i is valid, continuing",nv_idx);
+	
+	if( aux_ptr > max_addr ) {
+		dbgprint(MOD_REQ,__func__,"missing request end character after nvpair %i",nv_idx);
+		*req_validation = REQUEST_INVALID_END;
+		dbgprint(MOD_REQ,__func__,"updated req_validation value to %d",*req_validation);
+		DBGRET_SUCCESS(MOD_REQ);
+	}
+
+	if( V_REQENDCHAR(*aux_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"request end character detected");
+		*req_validation = REQUEST_IS_VALID;
+		dbgprint(MOD_REQ,__func__,"updated req_validation value to %d",*req_validation);
+		DBGRET_SUCCESS(MOD_REQ);
+	}
+
+	if( !V_TOKSEPCHAR(*aux_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"invalid character (%c) found between nvpair %i and"
+				" nvpair %i or end of request",*aux_ptr,nv_idx,nv_idx+1);
+		*req_validation = REQUEST_INVALID_SEP;
+		dbgprint(MOD_REQ,__func__,"updated req_validation value to %d",*req_validation);
+		DBGRET_SUCCESS(MOD_REQ);
+	}
+	aux_ptr++;
+	goto next_nvp;
+
+return_success:
+	DBGRET_SUCCESS(MOD_REQ);
+}
+
+/*
+   _req_validate_nv
+
+   Helper function to validate a single name-value pair from the TEXT request. It receives
+   a pointer to a char pointer that should contain the address of the NVP to be validated.
+   Before returning, the function updates the nv_ptr value to one byte after the last byte
+   of the nvpair.
+*/
+wstatus
+_req_validate_nv(char **nv_ptr,const unsigned int nv_max_size,nv_status_t *nv_status)
+{
+	char *aux;
+	char *aux_ref;
+	bool encoded = false;
+	bool quoted = false;
+	char *max_addr;
+
+	dbgprint(MOD_REQ,__func__,"called with nv_ptr=%p, nv_max_size=%u, nvpair_status=%p",
+			nv_ptr,nv_max_size,nv_status);
+
+	/* validate arguments */
+	if( !nv_ptr || !(*nv_ptr) ) {
+		dbgprint(MOD_REQ,__func__,"invalid nv_ptr argument (nv_ptr=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !nv_max_size ) {
+		dbgprint(MOD_REQ,__func__,"invalid nv_max_size (expecting nv_max_size > 0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	if( !nv_status ) {
+		dbgprint(MOD_REQ,__func__,"invalid nv_status argument (nv_status=0)");
+		DBGRET_FAILURE(MOD_REQ);
+	}
+
+	*nv_status = NV_STATUS_UNDEF;
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+
+	aux = aux_ref = (char*)*nv_ptr;
+	max_addr = *nv_ptr + nv_max_size;
+
+	for( ; aux <= max_addr ; aux++ )
+	{
+		if( V_REQENDCHAR(*aux) )
+			goto name_end_of_req;
+
+		if( V_NVSEPCHAR(*aux) )
+			goto end_of_name;
+
+		if( V_TOKSEPCHAR(*aux) )
+			goto end_of_name;
+
+		if( !V_NAMECHAR(*aux) )
+			goto invalid_name;
+	}
+
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) unable to find end of request character in this request",*nv_ptr);
+	*nv_status = NV_INVALID_END;
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+	DBGRET_SUCCESS(MOD_REQ);
+
+name_end_of_req:
+	if( aux == aux_ref ) {
+		/* no name was processed */
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) name is empty",*nv_ptr);
+		*nv_status = NV_INVALID_NAME;
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+		DBGRET_SUCCESS(MOD_REQ);
+	}
+
+	/* this nv has only the name */
+	*nv_status = NV_IS_VALID;
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+	*nv_ptr = aux;
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_ptr value to %p",*nv_ptr,*nv_ptr);
+	DBGRET_SUCCESS(MOD_REQ);
+
+invalid_name:
+	/* found invalid character in NAME field */
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) found invalid/unexpected character (0x%02X '%c') "
+			"in name parsing at index %u",*nv_ptr,*aux,b2c(*aux),aux - aux_ref);
+	*nv_status = NV_INVALID_NAME;
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+	DBGRET_SUCCESS(MOD_REQ);
+
+end_of_name:
+	if( aux == aux_ref ) {
+		/* this happens when the user passes name_ptr="=value" so it doesn't have
+		   any name character and the value prefix starts right next. */
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) name is empty",*nv_ptr);
+		*nv_status = NV_INVALID_NAME;
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+		DBGRET_SUCCESS(MOD_REQ);
+	}
+
+	/* start processing value */
+	aux_ref = aux;
+
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) parsed name successfully, starting value parsing",*nv_ptr);
+
+	if( V_TOKSEPCHAR(*aux) ) {
+		/* this nv has only the name */
+		*nv_status = NV_IS_VALID;
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+		*nv_ptr = aux;
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_ptr value to %p",*nv_ptr,*nv_ptr);
+		DBGRET_SUCCESS(MOD_REQ);
+	}
+
+	if( !V_NVSEPCHAR(*aux) ) {
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) unexpected character found in value prefix (0x%02X '%c') at index %u",
+				*nv_ptr,*aux,b2c(*aux),aux - aux_ref);
+
+		*nv_status = NV_INVALID_SEP;
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+		DBGRET_SUCCESS(MOD_REQ);
+	}
+	aux++;
+
+	if( (max_addr - aux) < 1 ) {
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) missing value TOKEN",*nv_ptr);
+		*nv_status = NV_INVALID_VALUE;
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+		DBGRET_SUCCESS(MOD_REQ);
+	}
+
+	if( V_ENCPREFIX(*aux) ) {
+		/* value is encoded */
+		encoded = true;
+		aux++;
+	} else if( V_QUOTECHAR(*aux) ) {
+		quoted = true;
+		aux++;
+	}
+
+	for( ; aux <= max_addr ; aux++ )
+	{
+		if( !quoted && V_REQENDCHAR(*aux) )
+		{
+			goto value_end_of_req;
+		}
+
+		if( quoted && V_QUOTECHAR(*aux) ) {
+			dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) reached quote character (this value has finished)",*nv_ptr);
+			aux++;
+			goto value_end;
+		}
+
+		if( encoded && !V_EVALUECHAR(*aux) ) {
+			dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) invalid character found in encoded value (0x%02X '%c' at index %u)",
+					*nv_ptr,*aux,b2c(*aux),aux - aux_ref);
+			goto return_invalid;
+		}
+
+		if( quoted && !V_QVALUECHAR(*aux) ) {
+			dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) invalid character found in quoted value (0x%02X '%c' at index %u)",
+					*nv_ptr,*aux,b2c(*aux),aux - aux_ref);
+			goto return_invalid;
+		}
+
+		if( !quoted && V_TOKSEPCHAR(*aux) )
+		{
+			dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) found name-value pair sep character");
+			goto value_end;
+		}
+
+		if( !quoted && !encoded && !V_VALUECHAR(*aux) )
+		{
+			dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) invalid character found in value (0x%02X '%c' at index %u)",
+					*nv_ptr,*aux,b2c(*aux),aux - aux_ref);
+			goto return_invalid;
+		}
+	}
+
+	if( quoted ) {
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) quoted value end character is missing",*nv_ptr);
+		*nv_status = NV_INVALID_VALUE;
+		dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+		DBGRET_SUCCESS(MOD_REQ);
+	}
+
+value_end_of_req:
+value_end:
+	*nv_status = NV_IS_VALID;
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
+	*nv_ptr = aux;
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_ptr value to %p",*nv_ptr,*nv_ptr);
+	DBGRET_SUCCESS(MOD_REQ);
+
+return_invalid:
+	*nv_status = NV_INVALID_VALUE;
+	dbgprint(MOD_REQ,__func__,"(nv_ptr=%p) updated nv_status value to %d",*nv_ptr,*nv_status);
 	DBGRET_SUCCESS(MOD_REQ);
 }
 
@@ -3412,7 +3810,7 @@ return_ok:
 wstatus
 _req_validate_code(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status)
 {
-	unsigned int aux_ui;
+	unsigned int aux_ui = 0;
 
 	dbgprint(MOD_REQ,__func__,"called with token_ptr=%p, token_max_size=%u, token_status=%p");
 
@@ -3438,7 +3836,14 @@ _req_validate_code(char **token_ptr,const unsigned int token_max_size,token_stat
 
 		/* not an ID character, validate */
 		if( V_TOKSEPCHAR((*token_ptr)[aux_ui]) || V_REQENDCHAR((*token_ptr)[aux_ui]) )
+		{
+			if( !aux_ui ) {
+				dbgprint(MOD_REQ,__func__,"token CODE is empty");
+				*token_status = TOKEN_IS_INVALID;
+				goto return_update;
+			}
 			goto return_ok;
+		}
 
 		dbgprint(MOD_REQ,__func__,"found invalid character in CODE token ('%c')",(*token_ptr)[aux_ui]);
 
@@ -3456,10 +3861,45 @@ return_invalid:
 
 return_ok:
 	*token_status = TOKEN_IS_VALID;
+return_update:
 	dbgprint(MOD_REQ,__func__,"updated token_status value to %d",*token_status);
 	*token_ptr = *token_ptr + aux_ui;
 	dbgprint(MOD_REQ,__func__,"updated *token_ptr value to %p",*token_ptr);
 
 	DBGRET_SUCCESS(MOD_REQ);
+}
+
+/*
+   req_validate_str
+
+   Debugging function to translate a req_valiation code to string.
+*/
+const char*req_validate_str(req_validation_t req_validation)
+{
+	switch(req_validation)
+	{
+		case REQUEST_VALIDATION_UNDEF:
+			return "REQUEST_VALIDATION_UNDEF";
+		case REQUEST_IS_VALID:
+			return "REQUEST_IS_VALID";
+		case REQUEST_INVALID_SEP:
+			return "REQUEST_INVALID_SEP";
+		case REQUEST_INVALID_ID:
+			return "REQUEST_INVALID_ID";
+		case REQUEST_INVALID_TYPE:
+			return "REQUEST_INVALID_ID";
+		case REQUEST_INVALID_MODSRC:
+			return "REQUEST_INVALID_MODSRC";
+		case REQUEST_INVALID_MODDST:
+			return "REQUEST_INVALID_MODDST";
+		case REQUEST_INVALID_CODE:
+			return "REQUEST_INVALID_CODE";
+		case REQUEST_INVALID_NV:
+			return "REQUEST_INVALID_NV";
+		case REQUEST_INVALID_END:
+			return "REQUEST_INVALID_END";
+		default:
+			return "<UNKNOWN>";
+		}
 }
 

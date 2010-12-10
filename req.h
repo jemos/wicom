@@ -118,10 +118,26 @@ typedef enum _request_lookup_result {
 } request_lookup_result;
 
 typedef enum _req_validation_t {
+	REQUEST_VALIDATION_UNDEF,
 	REQUEST_IS_VALID,
-	REQUEST_INVALID_NAME,
-	REQUEST_INVALID_VALUE
+	REQUEST_INVALID_SEP,
+	REQUEST_INVALID_ID,
+	REQUEST_INVALID_TYPE,
+	REQUEST_INVALID_MODSRC,
+	REQUEST_INVALID_MODDST,
+	REQUEST_INVALID_CODE,
+	REQUEST_INVALID_NV,
+	REQUEST_INVALID_END
 } req_validation_t;
+
+typedef enum _nv_status_t {
+	NV_STATUS_UNDEF,
+	NV_IS_VALID,
+	NV_INVALID_NAME,
+	NV_INVALID_VALUE,
+	NV_INVALID_END,
+	NV_INVALID_SEP
+} nv_status_t;
 
 typedef enum _token_status_t {
 	TOKEN_IS_VALID,
@@ -144,9 +160,9 @@ wstatus _req_bin_get_nv(const request_t req,const char *look_name_ptr,unsigned i
 wstatus _req_bin_get_nv_info(const struct _request_t *req,const char *look_name_ptr,unsigned int look_name_size,nvpair_info_t nvpi);
 wstatus _req_validate_id(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
 wstatus _req_validate_type(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
-wstatus _req_validate_modsrc(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
-wstatus _req_validate_moddst(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
+wstatus _req_validate_mod(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
 wstatus _req_validate_code(char **token_ptr,const unsigned int token_max_size,token_status_t *token_status);
+wstatus _req_validate_nv(char **nv_ptr,const unsigned int nv_max_size,nv_status_t *nvpair_status);
 
 /* functions that modify existing request */
 wstatus req_insert_nv(request_t req,char *name,char *value);
@@ -170,6 +186,7 @@ wstatus req_free(request_t req);
 /* debugging functions */
 wstatus req_dump(request_t req);
 wstatus req_diff(request_t req1_ptr,char *req1_label,request_t req2,char *req2_label);
+const char* req_validate_str(req_validation_t req_validation);
 
 #endif
 
