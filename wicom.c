@@ -253,10 +253,6 @@ void request_test(void)
 	req_to_bin(req_text4B,&req_bin4T);
 	req_diff(req_bin4,"req_bin4",req_bin4T,"req_bin4T");
 
-
-	request_t aux_req;
-	req_from_string("456 fromXpto toXtpo reqCODE nvpname1=#6566672A686970 name2=\"lala lele\"",&aux_req);
-	req_validate();
 	jmlist_uninitialize();
 	return;
 }
@@ -369,13 +365,47 @@ void reqbuf_test(void)
 	return;
 }
 
+void req_validation_test(void)
+{
+	char req_raw1[] = {"123 m1 m2 cX n1=v1 n2=\"v2 x\" n3=v3"};
+	char req_raw2[] = {"123 m1 m2 cX"};
+	char aux_char,aux_char2;
+	req_validation_t req_raw1_res[sizeof(req_raw1)];
+	req_validation_t req_validation;
+	int i;
+	
+	req_validate(req_raw2,strlen(req_raw2)+1,&req_validation);
+
+	for( i = sizeof(req_raw1) -	1; i > 0 ; i-- )
+	{
+		aux_char = req_raw1[i];
+		req_raw1[i] = '\0';
+		req_validate(req_raw1,strlen(req_raw1)+1,&req_validation);
+		req_raw1_res[i] = req_validation;
+		req_raw1[i] = aux_char;
+	}
+
+	for( i = 1 ; i < sizeof(req_raw1) - 1 ; i++ )
+	{
+		aux_char = req_raw1[i];
+		aux_char2 = req_raw1[i+1];
+		req_raw1[i] = '>';
+		req_raw1[i+1] = '\0';
+		printf("<%-40s | %s\n",req_raw1,req_validate_str(req_raw1_res[i]));
+		req_raw1[i] = aux_char;
+		req_raw1[i+1] = aux_char2;
+	}
+}
+
 int main(int argc,char *argv[])
 {
 	wstatus s;
 	wview_load_t load;
 	char buffer[32];
 
-	request_test();
+	req_validation_test();
+
+	//request_test();
 
 	//wchannel_test();
 
